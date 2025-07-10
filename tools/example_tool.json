@@ -1,0 +1,19 @@
+{
+    "name": "record_names",
+    "description": "record the names needed to analyse",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "names": {
+                "type": "array",
+                "description": "the names needed to analyse",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "required": [
+            "names"
+        ]
+    }
+}

@@ -1,0 +1,11 @@
+.vscode
+.idea
+/*.bin
+.DS_Store
+dlv.log
+__debug-main.bin
+
+**/.xgo/gen
+/kode
+/*.bin
+/x.*

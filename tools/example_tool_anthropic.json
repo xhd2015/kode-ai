@@ -1,0 +1,21 @@
+{
+    "format": "anthropic",
+    "name": "record_names",
+    "description": "record the names needed to analyse",
+    "input_schema": {
+        "properties": {
+            "names": {
+                "type": "array",
+                "description": "the names needed to analyse",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "required": [
+            "names"
+        ],
+        "type": "object"
+    },
+    "type": "custom"
+}
