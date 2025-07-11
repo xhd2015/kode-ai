@@ -1,6 +1,6 @@
 module github.com/xhd2015/kode-ai
 
-go 1.24.1
+go 1.24
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.5.0
@@ -8,7 +8,7 @@ require (
 	github.com/openai/openai-go v1.8.3
 	github.com/shopspring/decimal v1.4.0
 	github.com/xhd2015/less-gen v0.0.17
-	github.com/xhd2015/llm-tools v0.0.7
+	github.com/xhd2015/llm-tools v0.0.9
 	github.com/xhd2015/xgo v1.0.49-0.20240916074001-40aa40fc7623
 	golang.org/x/term v0.32.0
 )

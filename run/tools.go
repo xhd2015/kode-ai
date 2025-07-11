@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/xhd2015/llm-tools/tools/batch_read_file"
+	"github.com/xhd2015/llm-tools/tools/get_workspace_root"
 	"github.com/xhd2015/llm-tools/tools/grep_search"
 	"github.com/xhd2015/llm-tools/tools/list_dir"
 	"github.com/xhd2015/llm-tools/tools/read_file"
@@ -31,6 +32,11 @@ func executePresetTool(toolName string, arguments string, defaultWorkingDir stri
 
 	// Execute the tool based on its name
 	switch toolName {
+	case "get_workspace_root":
+		res, err = get_workspace_root.GetWorkspaceRoot(get_workspace_root.GetWorkspaceRootRequest{}, defaultWorkingDir)
+		if err != nil {
+			return fmt.Sprintf("Error executing %s: %v", toolName, err), true
+		}
 	case "batch_read_file":
 		req, err := batch_read_file.ParseJSONRequest(arguments)
 		if err != nil {

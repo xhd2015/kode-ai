@@ -20,6 +20,7 @@ import (
 	"github.com/openai/openai-go/packages/param"
 	"github.com/xhd2015/kode-ai/internal/ioread"
 	"github.com/xhd2015/kode-ai/internal/terminal"
+	"github.com/xhd2015/kode-ai/providers"
 	anthropic_helper "github.com/xhd2015/kode-ai/providers/anthropic"
 	"github.com/xhd2015/kode-ai/tools"
 )
@@ -43,16 +44,8 @@ type ChatOptions struct {
 	logChat    bool
 }
 
-type Provider string
-
-const (
-	ProviderOpenAI    Provider = "openai"
-	ProviderAnthropic Provider = "anthropic"
-	ProviderGemini    Provider = "gemini"
-)
-
 type ChatHandler struct {
-	Provider             Provider
+	Provider             providers.Provider
 	TokenEnvKey          string
 	BaseUrlEnvKey        string
 	DefaultBaseUrlEnvKey string
@@ -132,9 +125,9 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		baseUrl = envBaseURL
 	}
 
-	OPEN_AI := c.Provider == ProviderOpenAI
-	ANTHROPIC := c.Provider == ProviderAnthropic
-	isGemini := c.Provider == ProviderGemini
+	OPEN_AI := c.Provider == providers.ProviderOpenAI
+	ANTHROPIC := c.Provider == providers.ProviderAnthropic
+	isGemini := c.Provider == providers.ProviderGemini
 
 	_ = isGemini
 	// Load historical messages from record file if it exists
@@ -278,7 +271,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		fmt.Printf("Prompt cache %s with %s\n", cacheLog, model)
 	}
 
-	if needCache && c.Provider == ProviderAnthropic {
+	if needCache && c.Provider == providers.ProviderAnthropic {
 		systemAnthropic = anthropic_helper.MarkTextBlocksEphemeralCache(systemAnthropic)
 		toolsAnthropic = anthropic_helper.MarkToolsEphemeralCache(toolsAnthropic)
 	}
@@ -460,12 +453,12 @@ func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleS
 		}
 
 		switch c.Provider {
-		case ProviderOpenAI:
+		case providers.ProviderOpenAI:
 			historicalMessagesOpenAI, historicalSystemPrompts, err = msgHistory.ToOpenAI(openAIKeepMultipleSystemPrompts)
 			if err != nil {
 				return nil, fmt.Errorf("convert anthropic messages: %w", err)
 			}
-		case ProviderAnthropic:
+		case providers.ProviderAnthropic:
 			historicalMessagesAnthropic, historicalSystemPrompts, err = msgHistory.ToAnthropic()
 			if err != nil {
 				return nil, fmt.Errorf("convert anthropic messages: %w", err)
@@ -532,7 +525,7 @@ func (c *ChatHandler) createClient(baseURL string, token string, logRequest bool
 	var clientOpenAI *openai.Client
 	var clientAnthropic *anthropic.Client
 	switch c.Provider {
-	case ProviderOpenAI:
+	case providers.ProviderOpenAI:
 		var clientOptions []openai_opt.RequestOption
 		if baseURL != "" {
 			clientOptions = append(clientOptions, openai_opt.WithBaseURL(baseURL))
@@ -546,7 +539,7 @@ func (c *ChatHandler) createClient(baseURL string, token string, logRequest bool
 			clientOptions...,
 		)
 		clientOpenAI = &client
-	case ProviderAnthropic:
+	case providers.ProviderAnthropic:
 		var clientOpts []anth_opt.RequestOption
 		if baseURL != "" {
 			clientOpts = append(clientOpts, anth_opt.WithBaseURL(baseURL))
@@ -587,7 +580,7 @@ func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts 
 	var messagesOpenAI []openai.ChatCompletionMessageParamUnion
 	var messagesAnthropic []anthropic.MessageParam
 	switch c.Provider {
-	case ProviderOpenAI:
+	case providers.ProviderOpenAI:
 		if openAIKeepMultipleSystemPrompts {
 			messagesOpenAI = append(messagesOpenAI, historicalMessagesOpenAI...)
 			if systemMessageOpenAI != nil {
@@ -616,7 +609,7 @@ func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts 
 		if len(messagesOpenAI) == 0 {
 			return nil, fmt.Errorf("requires msg")
 		}
-	case ProviderAnthropic:
+	case providers.ProviderAnthropic:
 		messagesAnthropic = append(messagesAnthropic, historicalMessagesAnthropic...)
 		// Add current user message
 		if len(historicalMessagesAnthropic) == 0 {
@@ -936,7 +929,7 @@ func (c *ChatHandler) processAnthropicResponse(resultAnthropic *anthropic.Messag
 
 func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, resultOpenAI *openai.ChatCompletion, resultAnthropic *anthropic.Message) (bool, error) {
 	switch c.Provider {
-	case ProviderOpenAI:
+	case providers.ProviderOpenAI:
 		if len(resultOpenAI.Choices) == 0 {
 			return false, fmt.Errorf("response no choices")
 		}
@@ -956,7 +949,7 @@ func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, res
 				}
 			}
 		}
-	case ProviderAnthropic:
+	case providers.ProviderAnthropic:
 		if resultAnthropic.StopReason != "" {
 			if recordFile != "" {
 				stopMsg := Message{

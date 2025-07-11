@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/kode-ai/internal/ioread"
+	"github.com/xhd2015/kode-ai/providers"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -120,40 +121,6 @@ func Main(args []string, opts Options) error {
 	}
 }
 
-const (
-	ModelGPT4o                    = "gpt-4o"      // $0.15 / 1M
-	ModelGPT4oMini                = "gpt-4o-mini" // $0.15 / 1M
-	ModelGPT4oNano                = "gpt-4o-nano" // $0.15 / 1M
-	ModelGPTo4Mini                = "o4-mini"     // 10x gpt-4o-mini
-	ModelGPTo3Mini                = "o3-mini"     // 10x gpt-4o-mini
-	ModelGPT4_1                   = "gpt-4.1"     // $2
-	ModelGPT4_1_Mini              = "gpt-4.1-mini"
-	ModelGPTo3                    = "o3"                // $2
-	ModelClaude3_7Sonnet          = "claude-3-7-sonnet" // $3
-	ModelClaude3_7Sonnet_20250219 = "claude-3-7-sonnet@20250219"
-	ModelClaudeSonnet4            = "claude-sonnet-4" // $3
-	ModelClaudeSonnet4_20250514   = "claude-sonnet-4@20250514"
-	ModelDeepSeekR1               = "DeepSeek-R1"
-	ModelQwen25VL72BInstruct      = "Qwen2.5-VL-72B-Instruct"
-)
-
-var allModels = []string{
-	ModelClaudeSonnet4,
-	ModelClaudeSonnet4_20250514,
-	ModelClaude3_7Sonnet,
-	ModelClaude3_7Sonnet_20250219,
-	ModelGPT4_1,
-	ModelGPT4_1_Mini,
-	ModelGPTo3,
-	ModelGPT4o,
-	ModelGPT4oMini,
-	ModelGPT4oNano,
-	ModelGPTo4Mini,
-	ModelGPTo3Mini,
-	ModelDeepSeekR1,
-	ModelQwen25VL72BInstruct,
-}
-
 func handleChat(mode string, args []string, baesCmd string, defaultBaseURL string) error {
 	if len(args) > 0 {
 		arg := args[0]
@@ -226,7 +193,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	}
 
 	if model == "" {
-		model = ModelGPT4_1
+		model = providers.ModelGPT4_1
 	}
 
 	var msg string
@@ -268,13 +235,13 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		verbose:            verbose,
 	}
 
-	if model == ModelClaude3_7Sonnet {
-		model = ModelClaude3_7Sonnet_20250219
+	if model == providers.ModelClaude3_7Sonnet {
+		model = providers.ModelClaude3_7Sonnet_20250219
 	}
-	if model == ModelClaudeSonnet4 {
-		model = ModelClaudeSonnet4_20250514
+	if model == providers.ModelClaudeSonnet4 {
+		model = providers.ModelClaudeSonnet4_20250514
 	}
-	provider, err := getModelProvider(model)
+	provider, err := providers.GetModelProvider(model)
 	if err != nil {
 		return err
 	}
@@ -282,10 +249,10 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var tokenEnvKey string
 	var baseUrlEnvKey string
 	switch provider {
-	case ProviderOpenAI:
+	case providers.ProviderOpenAI:
 		tokenEnvKey = "OPENAI_API_KEY"
 		baseUrlEnvKey = "OPENAI_BASE_URL"
-	case ProviderAnthropic:
+	case providers.ProviderAnthropic:
 		tokenEnvKey = "ANTHROPIC_API_KEY"
 		baseUrlEnvKey = "ANTHROPIC_BASE_URL"
 	default:
@@ -306,9 +273,11 @@ func handleView(args []string) error {
 	var verbose bool
 	var lastAssistant bool
 	var showUsage bool
+	var tools bool
 	args, err := flags.Bool("-v,--verbose", &verbose).
 		Bool("--last-assistant", &lastAssistant).
 		Bool("--show-usage", &showUsage).
+		Bool("--tools", &tools).
 		Parse(args)
 	if err != nil {
 		return err
@@ -320,6 +289,7 @@ func handleView(args []string) error {
 	if showUsage && lastAssistant {
 		return fmt.Errorf("--show-usage and --last-assistant cannot be specified at the same time")
 	}
+
 	files := args
 	if showUsage {
 		var allMessages Messages
@@ -357,7 +327,16 @@ func handleView(args []string) error {
 		if err != nil {
 			return err
 		}
+
 		for _, m := range msg {
+			if tools {
+				switch m.Type {
+				case MsgType_ToolCall, MsgType_ToolResult:
+				default:
+					continue
+				}
+			}
+
 			switch m.Type {
 			case MsgType_Msg:
 				fmt.Printf("%s: %s\n", m.Role, m.Content)
@@ -368,7 +347,7 @@ func handleView(args []string) error {
 				limitedContent := limitPrintLength(m.Content)
 				fmt.Printf("%s: <tool_result tool=%q>%s</tool_result>\n", m.Role, m.ToolName, limitedContent)
 			case MsgType_TokenUsage:
-				provider, err := getModelProvider(m.Model)
+				provider, err := providers.GetModelProvider(m.Model)
 				if err != nil {
 					fmt.Printf("%s: token cost: %v\n", m.Role, err)
 					continue
@@ -402,21 +381,6 @@ func handleView(args []string) error {
 	}
 	printTokenUsage(os.Stdout, "Total Usage", total.Usage, totalCostUSD)
 	return nil
-}
-
-func getModelProvider(model string) (Provider, error) {
-	switch model {
-	case ModelGPT4_1, ModelGPT4_1_Mini, ModelGPT4o, ModelGPT4oMini, ModelGPT4oNano, ModelGPTo4Mini, ModelGPTo3:
-		return ProviderOpenAI, nil
-	case ModelClaude3_7Sonnet, ModelClaude3_7Sonnet_20250219, ModelClaudeSonnet4, ModelClaudeSonnet4_20250514:
-		return ProviderAnthropic, nil
-	default:
-		allModelsPrint := make([]string, 0, len(allModels))
-		for _, model := range allModels {
-			allModelsPrint = append(allModelsPrint, " - "+model)
-		}
-		return "", fmt.Errorf("unsupported model: %s\navailable:\n%s", model, strings.Join(allModelsPrint, "\n"))
-	}
 }
 
 func mustMarshal(v interface{}) string {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 	"github.com/xhd2015/kode-ai/internal/markdown"
+	"github.com/xhd2015/kode-ai/providers"
 )
 
 type TokenUsageCost struct {
@@ -119,7 +120,7 @@ func showUsageFromMessages(messages Messages) error {
 		}
 
 		total.Usage = total.Usage.Add(*msg.TokenUsage)
-		provider, err := getModelProvider(msg.Model)
+		provider, err := providers.GetModelProvider(msg.Model)
 		if err != nil {
 			return err
 		}
@@ -163,69 +164,6 @@ func showUsageFromMessages(messages Messages) error {
 
 type Number string
 
-type ModelCost struct {
-	InputUSDPer1M           string
-	InputCacheWriteUSDPer1M string
-	InputCacheReadUSDPer1M  string
-	OutputUSDPer1M          string
-}
-
-var cluade3_7Cost = ModelCost{
-	InputUSDPer1M:           "3.00",
-	InputCacheWriteUSDPer1M: "3.75", // cache has 5minute duration
-	InputCacheReadUSDPer1M:  "0.30",
-	OutputUSDPer1M:          "15.00",
-}
-
-var modelCostMapping = map[string]ModelCost{
-	ModelGPT4_1: ModelCost{
-		InputUSDPer1M:          "2",
-		InputCacheReadUSDPer1M: "0.50",
-		OutputUSDPer1M:         "8",
-	},
-	ModelGPT4_1_Mini: ModelCost{
-		InputUSDPer1M:          "0.4",
-		InputCacheReadUSDPer1M: "0.10",
-		OutputUSDPer1M:         "1.6",
-	},
-	ModelGPT4o: ModelCost{
-		InputUSDPer1M:          "2.5",
-		InputCacheReadUSDPer1M: "1.25",
-		OutputUSDPer1M:         "10",
-	},
-	ModelGPT4oNano: ModelCost{
-		InputUSDPer1M:          "0.1",
-		InputCacheReadUSDPer1M: "0.025",
-		OutputUSDPer1M:         "0.4",
-	},
-	ModelGPT4oMini: ModelCost{
-		InputUSDPer1M:          "0.15",
-		InputCacheReadUSDPer1M: "0.075",
-		OutputUSDPer1M:         "0.6",
-	},
-	ModelGPTo4Mini: ModelCost{
-		InputUSDPer1M:          "1.10",
-		InputCacheReadUSDPer1M: "0.55",
-		OutputUSDPer1M:         "4.40",
-	},
-	ModelGPTo3Mini: ModelCost{
-		InputUSDPer1M:          "1.10",
-		InputCacheReadUSDPer1M: "0.55",
-		OutputUSDPer1M:         "4.40",
-	},
-	// NOTE: o3 price has dropped 5x, same with GPT-4.1
-	ModelGPTo3: ModelCost{
-		InputUSDPer1M:          "2",
-		InputCacheReadUSDPer1M: "0.50",
-		OutputUSDPer1M:         "8",
-	},
-	// see https://openai.com/api/pricing/
-	ModelClaude3_7Sonnet:          cluade3_7Cost,
-	ModelClaude3_7Sonnet_20250219: cluade3_7Cost,
-	ModelClaudeSonnet4:            cluade3_7Cost,
-	ModelClaudeSonnet4_20250514:   cluade3_7Cost,
-}
-
 func requireFromString(s string) decimal.Decimal {
 	if s == "" {
 		return decimal.Zero
@@ -243,14 +181,14 @@ func addDecimals(nums ...string) string {
 
 var _1M = decimal.NewFromInt(1e6)
 
-func computeCost(provider Provider, model string, usage TokenUsage) (TokenCost, bool) {
-	costDef, ok := modelCostMapping[model]
+func computeCost(provider providers.Provider, model string, usage TokenUsage) (TokenCost, bool) {
+	costDef, ok := providers.GetModelCost(model)
 	if !ok {
 		return TokenCost{}, false
 	}
 	var inputUSD decimal.Decimal
 	var inputBreakdown TokenCostInputBreakdown
-	if provider == ProviderAnthropic {
+	if provider == providers.ProviderAnthropic {
 		inputCacheWriteUSD := requireFromString(costDef.InputCacheWriteUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheWrite)).Div(_1M)
 		inputNonCacheReadUSD := requireFromString(costDef.InputUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.NonCacheRead)).Div(_1M)
 		inputCacheReadUSD := requireFromString(costDef.InputCacheReadUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheRead)).Div(_1M)
