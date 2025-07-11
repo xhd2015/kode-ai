@@ -446,11 +446,13 @@ func printTokenUsage(w io.Writer, title string, tokenUsage TokenUsage, cost stri
 }
 
 func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleSystemPrompts bool) (*MessageHistoryUnion, error) {
+	var msgHistory Messages
+
 	var historicalMessagesOpenAI []openai.ChatCompletionMessageParamUnion
 	var historicalMessagesAnthropic []anthropic.MessageParam
 	var historicalSystemPrompts []string
 	if recordFile != "" {
-		var msgHistory Messages
+
 		var err error
 		msgHistory, err = loadHistoricalMessages(recordFile)
 		if err != nil {
@@ -474,6 +476,7 @@ func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleS
 
 	}
 	return &MessageHistoryUnion{
+		FullHistory:   msgHistory,
 		OpenAI:        historicalMessagesOpenAI,
 		Anthropic:     historicalMessagesAnthropic,
 		SystemPrompts: historicalSystemPrompts,
@@ -490,6 +493,7 @@ func (c *ChatHandler) checkUserMsgDuplicate(msg string, history Messages, ignore
 			break
 		}
 	}
+
 	if msg != "" && lastUserMsg != nil && msg == lastUserMsg.Content {
 		if ignoreDuplicateMsg {
 			msg = ""
@@ -498,7 +502,7 @@ func (c *ChatHandler) checkUserMsgDuplicate(msg string, history Messages, ignore
 				return "", true, fmt.Errorf("duplicate user msg, either clear the msg or run with --ignore-duplicate-msg")
 			}
 			// prompt user: duplicate msg, continune?
-			prompt := fmt.Sprintf("Duplicate with last msg from %s, continue? (c:continue, q:quit, x:clear and continue)", lastUserMsg.Time)
+			prompt := fmt.Sprintf("Duplicate input with last msg created at %s, proceed?\n  c:proceed with duplicate, x:proceed without duplicate, q:quit", lastUserMsg.Time)
 			for {
 				reader := bufio.NewReader(os.Stdin)
 				fmt.Println(prompt)
