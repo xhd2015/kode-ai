@@ -12,6 +12,23 @@ import (
 )
 
 func GetPresetTools(toolPresets []string) ([]*UnifiedTool, error) {
+	return getPresetTools(toolPresets)
+}
+
+func GetAllPresetTools() ([]*UnifiedTool, error) {
+	return getPresetTools(toolNames)
+}
+
+var toolNames = []string{
+	"get_workspace_root",
+	"batch_read_file",
+	"list_dir",
+	"run_terminal_cmd",
+	"grep_search",
+	"read_file",
+}
+
+func getPresetTools(toolPresets []string) ([]*UnifiedTool, error) {
 	var tools []*UnifiedTool
 	for _, preset := range toolPresets {
 		switch preset {

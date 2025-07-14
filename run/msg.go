@@ -6,6 +6,8 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/packages/param"
+	"github.com/xhd2015/kode-ai/internal/jsondecode"
+	"google.golang.org/genai"
 )
 
 type MsgType string
@@ -183,6 +185,77 @@ func (messages Messages) ToAnthropic() (msgs []anthropic.MessageParam, systemPro
 		msgs = append(msgs, anthropic.MessageParam{
 			Role:    msgRole,
 			Content: blocks,
+		})
+	}
+
+	return msgs, systemPrompts, nil
+}
+
+func (messages Messages) ToGemini() (msgs []*genai.Content, systemPrompts []string, err error) {
+	for _, msg := range messages {
+		if msg.Role == Role_System {
+			systemPrompts = append(systemPrompts, msg.Content)
+			continue
+		}
+
+		var parts []*genai.Part
+		switch msg.Type {
+		case MsgType_ToolCall:
+			var args map[string]any
+			err := jsondecode.UnmarshalSafe([]byte(msg.Content), &args)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			parts = append(parts, &genai.Part{
+				FunctionCall: &genai.FunctionCall{
+					// NOTE: Gemini tool use id is only client
+					// side, don't put them back or the API will
+					// report error saying
+					// unrecognized "id" param
+					//
+					// ID:   msg.ToolUseID,
+					Name: msg.ToolName,
+					Args: args,
+				},
+			})
+		case MsgType_ToolResult:
+			var resp map[string]any
+			err := jsondecode.UnmarshalSafe([]byte(msg.Content), &resp)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			parts = append(parts, &genai.Part{
+				FunctionResponse: &genai.FunctionResponse{
+					// ID:       msg.ToolUseID,
+					Name:     msg.ToolName,
+					Response: resp,
+				},
+			})
+		case MsgType_Msg:
+			parts = append(parts, &genai.Part{
+				Text: msg.Content,
+			})
+		}
+
+		var msgRole string
+		switch msg.Role {
+		case Role_User:
+			msgRole = genai.RoleUser
+		case Role_Assistant:
+			msgRole = genai.RoleModel
+		default:
+			continue
+		}
+
+		if len(parts) == 0 {
+			continue
+		}
+
+		msgs = append(msgs, &genai.Content{
+			Parts: parts,
+			Role:  msgRole,
 		})
 	}
 

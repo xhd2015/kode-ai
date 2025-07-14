@@ -19,6 +19,8 @@ func GetModelProvider(model string) (Provider, error) {
 		return ProviderOpenAI, nil
 	case ModelClaude3_7Sonnet, ModelClaude3_7Sonnet_20250219, ModelClaudeSonnet4, ModelClaudeSonnet4_20250514:
 		return ProviderAnthropic, nil
+	case ModelGemini2_0_Flash, ModelGemini2_0_Flash_001, ModelGemini2_5_Pro, ModelGemini2_5_Pro_0605, ModelGemini2_5_Flash, ModelGemini2_5_Flash_0520:
+		return ProviderGemini, nil
 	default:
 		allModelsPrint := make([]string, 0, len(AllModels))
 		for _, model := range AllModels {

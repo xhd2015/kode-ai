@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,10 +21,12 @@ import (
 	openai_opt "github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
 	"github.com/xhd2015/kode-ai/internal/ioread"
+	"github.com/xhd2015/kode-ai/internal/jsondecode"
 	"github.com/xhd2015/kode-ai/internal/terminal"
 	"github.com/xhd2015/kode-ai/providers"
 	anthropic_helper "github.com/xhd2015/kode-ai/providers/anthropic"
 	"github.com/xhd2015/kode-ai/tools"
+	"google.golang.org/genai"
 )
 
 type ChatOptions struct {
@@ -66,14 +70,16 @@ type ChatHandler struct {
 type ClientUnion struct {
 	OpenAI    *openai.Client
 	Anthropic *anthropic.Client
+	Gemini    *genai.Client
 }
 
 type MessageHistoryUnion struct {
-	FullHistory Messages
-
-	OpenAI        []openai.ChatCompletionMessageParamUnion
-	Anthropic     []anthropic.MessageParam
+	FullHistory   Messages
 	SystemPrompts []string
+
+	OpenAI    []openai.ChatCompletionMessageParamUnion
+	Anthropic []anthropic.MessageParam
+	Gemini    []*genai.Content
 }
 
 type ToolsUnion struct {
@@ -125,19 +131,15 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		baseUrl = envBaseURL
 	}
 
-	OPEN_AI := c.Provider == providers.ProviderOpenAI
-	ANTHROPIC := c.Provider == providers.ProviderAnthropic
-	isGemini := c.Provider == providers.ProviderGemini
-
-	_ = isGemini
 	// Load historical messages from record file if it exists
-
 	historyMsgs, err := c.readHistoryMessages(recordFile, openAIKeepMultipleSystemPrompts)
 	if err != nil {
 		return err
 	}
+
 	historicalMessagesOpenAI := historyMsgs.OpenAI
 	historicalMessagesAnthropic := historyMsgs.Anthropic
+	historicalMessagesGemini := historyMsgs.Gemini
 	historicalSystemPrompts := historyMsgs.SystemPrompts
 
 	msg, stop, err := c.checkUserMsgDuplicate(msg, historyMsgs.FullHistory, ignoreDuplicateMsg)
@@ -147,13 +149,14 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 	if stop {
 		return nil
 	}
-
-	clients, err := c.createClient(baseUrl, token, logRequest)
+	ctx := context.TODO()
+	clients, err := c.createClient(ctx, baseUrl, token, logRequest)
 	if err != nil {
 		return err
 	}
 	clientOpenAI := clients.OpenAI
 	clientAnthropic := clients.Anthropic
+	clientGemini := clients.Gemini
 
 	toolSchemas, err := tools.ParseSchemas(opts.toolFiles, opts.toolJSONs)
 	if err != nil {
@@ -167,14 +170,20 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 
 	var toolsOpenAI []openai.ChatCompletionToolParam
 	var toolsAnthropic []anthropic.ToolUnionParam
-	switch {
-	case OPEN_AI:
+	var toolsGemini []*genai.Tool
+	switch c.Provider {
+	case providers.ProviderOpenAI:
 		toolsOpenAI, err = toolSchemas.ToOpenAI()
 		if err != nil {
 			return err
 		}
-	case ANTHROPIC:
+	case providers.ProviderAnthropic:
 		toolsAnthropic, err = toolSchemas.ToAnthropic()
+		if err != nil {
+			return err
+		}
+	case providers.ProviderGemini:
+		toolsGemini, err = toolSchemas.ToGemini()
 		if err != nil {
 			return err
 		}
@@ -183,8 +192,9 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 	}
 
 	var systemMessageOpenAI *openai.ChatCompletionMessageParamUnion
-
 	var systemAnthropic []anthropic.TextBlockParam
+	var systemMessageGemini *genai.Content
+
 	var userSystemPrompt string
 	if opts.systemPrompt != "" {
 		content, err := ioread.ReadOrContent(opts.systemPrompt)
@@ -193,8 +203,8 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		}
 		userSystemPrompt = content
 
-		switch {
-		case OPEN_AI:
+		switch c.Provider {
+		case providers.ProviderOpenAI:
 			systemMessageOpenAI = &openai.ChatCompletionMessageParamUnion{
 				OfSystem: &openai.ChatCompletionSystemMessageParam{
 					Content: openai.ChatCompletionSystemMessageParamContentUnion{
@@ -202,17 +212,25 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 					},
 				},
 			}
-		case ANTHROPIC:
+		case providers.ProviderAnthropic:
 			systemMsg := anthropic.TextBlockParam{
 				Text: content,
 			}
 			systemAnthropic = append(systemAnthropic, systemMsg)
+		case providers.ProviderGemini:
+			systemMessageGemini = &genai.Content{
+				Parts: []*genai.Part{
+					{
+						Text: content,
+					},
+				},
+			}
 		default:
 			return fmt.Errorf("unsupported provider: %s", c.Provider)
 		}
 	} else if len(historicalSystemPrompts) > 0 {
-		switch {
-		case OPEN_AI:
+		switch c.Provider {
+		case providers.ProviderOpenAI:
 			// do nothing
 			if !openAIKeepMultipleSystemPrompts {
 				lastSystemPrompt := historicalSystemPrompts[len(historicalSystemPrompts)-1]
@@ -224,7 +242,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 					},
 				}
 			}
-		case ANTHROPIC:
+		case providers.ProviderAnthropic:
 			// If user doesn't provide a system prompt, use the last system prompt in historical messages
 			lastSystemPrompt := historicalSystemPrompts[len(historicalSystemPrompts)-1]
 
@@ -232,18 +250,28 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				Text: lastSystemPrompt,
 			}
 			systemAnthropic = append(systemAnthropic, systemMsg)
+		case providers.ProviderGemini:
+			lastSystemPrompt := historicalSystemPrompts[len(historicalSystemPrompts)-1]
+			systemMessageGemini = &genai.Content{
+				Parts: []*genai.Part{
+					{
+						Text: lastSystemPrompt,
+					},
+				},
+			}
 		default:
 			return fmt.Errorf("system prompt: unsupported provider: %s", c.Provider)
 		}
 	}
 
 	// build messages
-	msgsUnion, err := c.buildMessages(msg, openAIKeepMultipleSystemPrompts, systemMessageOpenAI, historicalMessagesOpenAI, historicalMessagesAnthropic)
+	msgsUnion, err := c.buildMessages(msg, openAIKeepMultipleSystemPrompts, systemMessageOpenAI, historicalMessagesOpenAI, historicalMessagesAnthropic, historicalMessagesGemini)
 	if err != nil {
 		return err
 	}
 	messagesOpenAI := msgsUnion.OpenAI
 	messagesAnthropic := msgsUnion.Anthropic
+	messagesGemini := msgsUnion.Gemini
 
 	LOOP := maxRound
 	if maxRound <= 0 {
@@ -276,11 +304,18 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		toolsAnthropic = anthropic_helper.MarkToolsEphemeralCache(toolsAnthropic)
 	}
 
-	ctx := context.Background()
+	var toolUseNum int
+	for _, msg := range historyMsgs.FullHistory {
+		if msg.Type == MsgType_ToolCall {
+			toolUseNum++
+		}
+	}
+
 	i := 0
 	for ; i < LOOP; i++ {
 		var resultOpenAI *openai.ChatCompletion
 		var resultAnthropic *anthropic.Message
+		var resultGemini *genai.GenerateContentResponse
 
 		startTime := time.Now()
 		if logChat {
@@ -288,8 +323,8 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			fmt.Println("Request...")
 		}
 
-		switch {
-		case OPEN_AI:
+		switch c.Provider {
+		case providers.ProviderOpenAI:
 			resultOpenAI, err = clientOpenAI.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 				Model:    model,
 				Messages: messagesOpenAI,
@@ -299,7 +334,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			if err != nil {
 				return err
 			}
-		case ANTHROPIC:
+		case providers.ProviderAnthropic:
 			sendMessage := messagesAnthropic
 			if needCache {
 				sendMessage = anthropic_helper.MarkMsgsEphemeralCache(messagesAnthropic)
@@ -310,6 +345,21 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				Messages:  sendMessage,
 				System:    systemAnthropic,
 				Tools:     toolsAnthropic,
+			})
+			if err != nil {
+				return err
+			}
+		case providers.ProviderGemini:
+			resultGemini, err = clientGemini.Models.GenerateContent(ctx, model, messagesGemini, &genai.GenerateContentConfig{
+				HTTPOptions: &genai.HTTPOptions{
+					APIVersion: "v1",
+					Headers: http.Header{
+						"Authorization": []string{fmt.Sprintf("Bearer %s", token)},
+					},
+				},
+				SystemInstruction: systemMessageGemini,
+				Tools:             toolsGemini,
+				CandidateCount:    1,
 			})
 			if err != nil {
 				return err
@@ -331,9 +381,9 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		}
 		var tokenUsage TokenUsage
 
-		var hasToolCalls bool
-		switch {
-		case OPEN_AI:
+		var newToolUseNum int
+		switch c.Provider {
+		case providers.ProviderOpenAI:
 			res, err := c.processOpenAIResponse(resultOpenAI, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets)
 			if err != nil {
 				return err
@@ -344,10 +394,9 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 
 			messagesOpenAI = append(messagesOpenAI, respMessages...)
 			messagesOpenAI = append(messagesOpenAI, toolResults...)
-			if res.HasToolCalls {
-				hasToolCalls = true
-			}
-		case ANTHROPIC:
+
+			newToolUseNum = res.ToolUseNum
+		case providers.ProviderAnthropic:
 			res, err := c.processAnthropicResponse(resultAnthropic, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets)
 			if err != nil {
 				return err
@@ -367,9 +416,22 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 					Content: toolResults,
 				})
 			}
-			if res.HasToolCalls {
-				hasToolCalls = true
+			newToolUseNum = res.ToolUseNum
+		case providers.ProviderGemini:
+			res, err := c.processGeminiResponse(resultGemini, toolUseNum, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets)
+			if err != nil {
+				return err
 			}
+			tokenUsage = res.TokenUsage
+			respMessages := res.Messages
+			toolResults := res.ToolResults
+			if len(respMessages) > 0 {
+				messagesGemini = append(messagesGemini, respMessages...)
+			}
+			if len(toolResults) > 0 {
+				messagesGemini = append(messagesGemini, toolResults...)
+			}
+			newToolUseNum = res.ToolUseNum
 		default:
 			return fmt.Errorf("unsupported provider: %s", c.Provider)
 		}
@@ -388,9 +450,14 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			}
 		}
 
-		stopped, err := c.checkRecordStopReason(recordFile, model, resultOpenAI, resultAnthropic)
+		stopped, stopMsg, err := c.checkRecordStopReason(recordFile, model, resultOpenAI, resultAnthropic, resultGemini)
 		if err != nil {
 			return err
+		}
+		if recordFile != "" && stopMsg != nil {
+			if err := appendToRecordFile(recordFile, stopMsg); err != nil {
+				return fmt.Errorf("record stop reason message: %v", err)
+			}
 		}
 		cost, costOK := computeCost(c.Provider, model, tokenUsage)
 		var costUSD string
@@ -404,7 +471,8 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		if stopped {
 			break
 		}
-		if !hasToolCalls {
+		toolUseNum += newToolUseNum
+		if newToolUseNum == 0 {
 			break
 		}
 	}
@@ -441,9 +509,11 @@ func printTokenUsage(w io.Writer, title string, tokenUsage TokenUsage, cost stri
 func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleSystemPrompts bool) (*MessageHistoryUnion, error) {
 	var msgHistory Messages
 
+	var historicalSystemPrompts []string
+
 	var historicalMessagesOpenAI []openai.ChatCompletionMessageParamUnion
 	var historicalMessagesAnthropic []anthropic.MessageParam
-	var historicalSystemPrompts []string
+	var historicalMessagesGemini []*genai.Content
 	if recordFile != "" {
 
 		var err error
@@ -463,6 +533,11 @@ func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleS
 			if err != nil {
 				return nil, fmt.Errorf("convert anthropic messages: %w", err)
 			}
+		case providers.ProviderGemini:
+			historicalMessagesGemini, historicalSystemPrompts, err = msgHistory.ToGemini()
+			if err != nil {
+				return nil, fmt.Errorf("convert gemini messages: %w", err)
+			}
 		default:
 			return nil, fmt.Errorf("read recording: unsupported provider: %s", c.Provider)
 		}
@@ -470,9 +545,11 @@ func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleS
 	}
 	return &MessageHistoryUnion{
 		FullHistory:   msgHistory,
-		OpenAI:        historicalMessagesOpenAI,
-		Anthropic:     historicalMessagesAnthropic,
 		SystemPrompts: historicalSystemPrompts,
+
+		OpenAI:    historicalMessagesOpenAI,
+		Anthropic: historicalMessagesAnthropic,
+		Gemini:    historicalMessagesGemini,
 	}, nil
 }
 
@@ -521,9 +598,10 @@ func (c *ChatHandler) checkUserMsgDuplicate(msg string, history Messages, ignore
 	return msg, false, nil
 }
 
-func (c *ChatHandler) createClient(baseURL string, token string, logRequest bool) (*ClientUnion, error) {
+func (c *ChatHandler) createClient(ctx context.Context, baseURL string, token string, logRequest bool) (*ClientUnion, error) {
 	var clientOpenAI *openai.Client
 	var clientAnthropic *anthropic.Client
+	var clientGemini *genai.Client
 	switch c.Provider {
 	case providers.ProviderOpenAI:
 		var clientOptions []openai_opt.RequestOption
@@ -552,12 +630,26 @@ func (c *ChatHandler) createClient(baseURL string, token string, logRequest bool
 		clientAnthropic = anthropic_helper.NewClient(
 			clientOpts...,
 		)
+	case providers.ProviderGemini:
+		var err error
+		// see https://ai.google.dev/gemini-api/docs#rest
+		clientGemini, err = genai.NewClient(ctx, &genai.ClientConfig{
+			APIKey:  token,
+			Backend: genai.BackendGeminiAPI,
+			HTTPOptions: genai.HTTPOptions{
+				BaseURL: baseURL,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", c.Provider)
 	}
 	return &ClientUnion{
 		OpenAI:    clientOpenAI,
 		Anthropic: clientAnthropic,
+		Gemini:    clientGemini,
 	}, nil
 }
 
@@ -573,12 +665,14 @@ func limitPrintLength(s string) string {
 type MessagesUnion struct {
 	OpenAI    []openai.ChatCompletionMessageParamUnion
 	Anthropic []anthropic.MessageParam
+	Gemini    []*genai.Content
 }
 
 // Add historical messages first
-func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts bool, systemMessageOpenAI *openai.ChatCompletionMessageParamUnion, historicalMessagesOpenAI []openai.ChatCompletionMessageParamUnion, historicalMessagesAnthropic []anthropic.MessageParam) (*MessagesUnion, error) {
+func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts bool, systemMessageOpenAI *openai.ChatCompletionMessageParamUnion, historicalMessagesOpenAI []openai.ChatCompletionMessageParamUnion, historicalMessagesAnthropic []anthropic.MessageParam, historicalMessagesGemini []*genai.Content) (*MessagesUnion, error) {
 	var messagesOpenAI []openai.ChatCompletionMessageParamUnion
 	var messagesAnthropic []anthropic.MessageParam
+	var messagesGemini []*genai.Content
 	switch c.Provider {
 	case providers.ProviderOpenAI:
 		if openAIKeepMultipleSystemPrompts {
@@ -627,12 +721,35 @@ func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts 
 		if len(messagesAnthropic) == 0 {
 			return nil, fmt.Errorf("requires msg")
 		}
+	case providers.ProviderGemini:
+		messagesGemini = append(messagesGemini, historicalMessagesGemini...)
+		if len(historicalMessagesGemini) == 0 {
+			if msg == "" {
+				return nil, fmt.Errorf("requires msg")
+			}
+		}
+		if msg != "" {
+			// no cache user message
+			messagesGemini = append(messagesGemini, &genai.Content{
+				Parts: []*genai.Part{
+					{
+						Text: msg,
+					},
+				},
+				Role: genai.RoleUser,
+			})
+		}
+
+		if len(messagesGemini) == 0 {
+			return nil, fmt.Errorf("requires msg")
+		}
 	default:
 		return nil, fmt.Errorf("msg: unsupported provider: %s", c.Provider)
 	}
 	return &MessagesUnion{
 		OpenAI:    messagesOpenAI,
 		Anthropic: messagesAnthropic,
+		Gemini:    messagesGemini,
 	}, nil
 }
 
@@ -669,10 +786,10 @@ func (c *ChatHandler) recordInitialMsg(msg string, userSystemPrompt string, hist
 }
 
 type ResponseResultOpenAI struct {
-	HasToolCalls bool
-	Messages     []openai.ChatCompletionMessageParamUnion
-	ToolResults  []openai.ChatCompletionMessageParamUnion
-	TokenUsage   TokenUsage
+	ToolUseNum  int
+	Messages    []openai.ChatCompletionMessageParamUnion
+	ToolResults []openai.ChatCompletionMessageParamUnion
+	TokenUsage  TokenUsage
 }
 
 func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string) (*ResponseResultOpenAI, error) {
@@ -680,7 +797,7 @@ func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion,
 		return nil, fmt.Errorf("response no choices")
 	}
 	firstChoice := resultOpenAI.Choices[0]
-	var hasToolCalls bool
+	var toolUseNum int
 	var messages []openai.ChatCompletionMessageParamUnion
 
 	// Handle main content
@@ -713,7 +830,7 @@ func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion,
 	var recordToolCalls []openai.ChatCompletionMessageToolCallParam
 	var recordToolResults []openai.ChatCompletionMessageParamUnion
 	for _, toolCall := range firstChoice.Message.ToolCalls {
-		hasToolCalls = true
+		toolUseNum++
 		toolCallStr := fmt.Sprintf("<tool_call>%s(%s)</tool_call>", toolCall.Function.Name, toolCall.Function.Arguments)
 		fmt.Println(toolCallStr)
 
@@ -783,9 +900,9 @@ func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion,
 	}
 
 	return &ResponseResultOpenAI{
-		HasToolCalls: hasToolCalls,
-		Messages:     messages,
-		ToolResults:  recordToolResults,
+		ToolUseNum:  toolUseNum,
+		Messages:    messages,
+		ToolResults: recordToolResults,
 		TokenUsage: TokenUsage{
 			Input:  resultOpenAI.Usage.PromptTokens,
 			Output: resultOpenAI.Usage.CompletionTokens,
@@ -801,14 +918,14 @@ func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion,
 }
 
 type ResponseResultAnthropic struct {
-	HasToolCalls bool
-	Messages     []anthropic.ContentBlockParamUnion
-	ToolResults  []anthropic.ContentBlockParamUnion
-	TokenUsage   TokenUsage
+	ToolUseNum  int
+	Messages    []anthropic.ContentBlockParamUnion
+	ToolResults []anthropic.ContentBlockParamUnion
+	TokenUsage  TokenUsage
 }
 
 func (c *ChatHandler) processAnthropicResponse(resultAnthropic *anthropic.Message, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string) (*ResponseResultAnthropic, error) {
-	var hasToolCalls bool
+	var toolUseNum int
 	var respContents []anthropic.ContentBlockParamUnion
 	var toolResults []anthropic.ContentBlockParamUnion
 	for _, msg := range resultAnthropic.Content {
@@ -836,7 +953,7 @@ func (c *ChatHandler) processAnthropicResponse(resultAnthropic *anthropic.Messag
 				}
 			}
 		case "tool_use":
-			hasToolCalls = true
+			toolUseNum++
 			toolUse := msg.AsToolUse()
 			toolCallStr := fmt.Sprintf("<tool_call>%s(%s)</tool_call>", toolUse.Name, string(toolUse.Input))
 			fmt.Println(toolCallStr)
@@ -909,9 +1026,9 @@ func (c *ChatHandler) processAnthropicResponse(resultAnthropic *anthropic.Messag
 
 	totalInput := resultAnthropic.Usage.InputTokens + resultAnthropic.Usage.CacheCreationInputTokens + resultAnthropic.Usage.CacheReadInputTokens
 	return &ResponseResultAnthropic{
-		Messages:     respContents,
-		ToolResults:  toolResults,
-		HasToolCalls: hasToolCalls,
+		Messages:    respContents,
+		ToolResults: toolResults,
+		ToolUseNum:  toolUseNum,
 		TokenUsage: TokenUsage{
 			Input:  totalInput,
 			Output: resultAnthropic.Usage.OutputTokens,
@@ -927,50 +1044,210 @@ func (c *ChatHandler) processAnthropicResponse(resultAnthropic *anthropic.Messag
 	}, nil
 }
 
-func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, resultOpenAI *openai.ChatCompletion, resultAnthropic *anthropic.Message) (bool, error) {
+type ResponseResultGemini struct {
+	ToolUseNum  int
+	Messages    []*genai.Content
+	ToolResults []*genai.Content
+	TokenUsage  TokenUsage
+}
+
+func (c *ChatHandler) processGeminiResponse(resultGemini *genai.GenerateContentResponse, toolUsedNum int, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string) (*ResponseResultGemini, error) {
+	var toolUseNum int
+	var respContents []*genai.Content
+	var toolResults []*genai.Content
+
+	if len(resultGemini.Candidates) == 0 {
+		return nil, fmt.Errorf("empty result candidates")
+	}
+	choice := resultGemini.Candidates[0]
+
+	for _, part := range choice.Content.Parts {
+		if part.FunctionCall != nil {
+			toolUseNum++
+			toolUse := part.FunctionCall
+
+			toolRecordID := toolUse.ID
+			if toolUse.ID == "" {
+				toolRecordID = strconv.FormatInt(int64(toolUsedNum+1), 10)
+				// does not support ID?
+				// NOTE: Gemini no need to put an ID
+				// though other providers needs this ID
+				// cloneToolUse := *toolUse
+				// cloneToolUse.ID = uuid.New().String()
+				// toolUse = &cloneToolUse
+			}
+			argsJSON, err := json.Marshal(toolUse.Args)
+			if err != nil {
+				return nil, fmt.Errorf("marshal args: %w", err)
+			}
+			argsJSONStr := string(argsJSON)
+			toolCallStr := fmt.Sprintf("<tool_call>%s(%s)</tool_call>", toolUse.Name, argsJSONStr)
+			fmt.Println(toolCallStr)
+
+			cloneToolUse := *toolUse
+			respContents = append(respContents, &genai.Content{
+				Parts: []*genai.Part{
+					{
+						FunctionCall: &cloneToolUse,
+					},
+				},
+				Role: choice.Content.Role,
+			})
+
+			// Record the tool call individually if recordFile is specified
+			if recordFile != "" {
+				toolCallMsg := Message{
+					Type:      MsgType_ToolCall,
+					Role:      Role_Assistant,
+					Model:     model,
+					Content:   argsJSONStr,
+					ToolUseID: toolRecordID,
+					ToolName:  toolUse.Name,
+				}
+				if err := appendToRecordFile(recordFile, &toolCallMsg); err != nil {
+					return nil, fmt.Errorf("failed to record tool call message: %v", err)
+				}
+			}
+
+			result, ok := executePresetTool(toolUse.Name, argsJSONStr, defaultToolCwd, toolPresets)
+			if ok {
+				toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
+				fmt.Println(toolResultStr)
+
+				var response map[string]any
+				err := jsondecode.UnmarshalSafe([]byte(result), &response)
+				if err != nil {
+					return nil, fmt.Errorf("unmarshal tool result: %w", err)
+				}
+
+				toolResults = append(toolResults, &genai.Content{
+					Role: genai.RoleUser,
+					Parts: []*genai.Part{
+						{
+							FunctionResponse: &genai.FunctionResponse{
+								ID:       toolUse.ID,
+								Name:     toolUse.Name,
+								Response: response,
+							},
+						},
+					},
+				})
+
+				// Record the tool result individually if recordFile is specified
+				if recordFile != "" {
+					toolResultMsg := Message{
+						Type:      MsgType_ToolResult,
+						Role:      Role_User,
+						Model:     model,
+						Content:   result,
+						ToolUseID: toolRecordID,
+						ToolName:  toolUse.Name,
+					}
+					if err := appendToRecordFile(recordFile, &toolResultMsg); err != nil {
+						return nil, fmt.Errorf("failed to record tool result message: %v", err)
+					}
+				}
+			} else if hasMaxRound {
+				return nil, fmt.Errorf("max round > 1 requires tool to be executed: %s", toolUse.Name)
+			}
+		} else if part.Text != "" {
+			txt := part.Text
+			fmt.Println(txt)
+			respContents = append(respContents, &genai.Content{
+				Role: choice.Content.Role,
+			})
+			// Record the text response individually if recordFile is specified
+			if recordFile != "" {
+				assistantMsg := Message{
+					Type:    MsgType_Msg,
+					Role:    Role_Assistant,
+					Model:   model,
+					Content: txt,
+				}
+				if err := appendToRecordFile(recordFile, &assistantMsg); err != nil {
+					return nil, fmt.Errorf("failed to record assistant text message: %v", err)
+				}
+			}
+		}
+	}
+
+	var tokenUsage TokenUsage
+	if resultGemini.UsageMetadata != nil {
+		usage := resultGemini.UsageMetadata
+
+		inputToken := usage.PromptTokenCount + usage.ToolUsePromptTokenCount
+		outputToken := usage.CandidatesTokenCount
+		cacheRead := usage.CachedContentTokenCount
+
+		tokenUsage = TokenUsage{
+			Input:  int64(inputToken),
+			Output: int64(outputToken),
+			Total:  int64(usage.TotalTokenCount),
+			InputBreakdown: TokenUsageInputBreakdown{
+				CacheRead:    int64(cacheRead),
+				NonCacheRead: int64(inputToken - cacheRead),
+			},
+		}
+	}
+
+	return &ResponseResultGemini{
+		Messages:    respContents,
+		ToolResults: toolResults,
+		ToolUseNum:  toolUseNum,
+		TokenUsage:  tokenUsage,
+	}, nil
+}
+
+func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, resultOpenAI *openai.ChatCompletion, resultAnthropic *anthropic.Message, resultGemini *genai.GenerateContentResponse) (bool, *Message, error) {
 	switch c.Provider {
 	case providers.ProviderOpenAI:
 		if len(resultOpenAI.Choices) == 0 {
-			return false, fmt.Errorf("response no choices")
+			return false, nil, fmt.Errorf("response no choices")
 		}
 		if recordFile != "" {
 			firstChoice := resultOpenAI.Choices[0]
 			if firstChoice.FinishReason != "" {
-				stopMsg := Message{
+				return false, &Message{
 					Type:  MsgType_StopReason,
 					Role:  Role_Assistant,
 					Model: model,
 					Content: mustMarshal(map[string]string{
 						"finish_reason": firstChoice.FinishReason,
 					}),
-				}
-				if err := appendToRecordFile(recordFile, &stopMsg); err != nil {
-					return false, fmt.Errorf("failed to record stop reason message: %v", err)
-				}
+				}, nil
 			}
 		}
 	case providers.ProviderAnthropic:
 		if resultAnthropic.StopReason != "" {
-			if recordFile != "" {
-				stopMsg := Message{
-					Type:  MsgType_StopReason,
-					Role:  Role_Assistant,
-					Model: model,
-					Content: mustMarshal(map[string]string{
-						"stop_reason":   string(resultAnthropic.StopReason),
-						"stop_sequence": resultAnthropic.StopSequence,
-					}),
-				}
-				if err := appendToRecordFile(recordFile, &stopMsg); err != nil {
-					return false, fmt.Errorf("failed to record stop reason message: %v", err)
-				}
-			}
-			if resultAnthropic.StopReason == "end_turn" {
-				return true, nil
-			}
+			return resultAnthropic.StopReason == "end_turn", &Message{
+				Type:  MsgType_StopReason,
+				Role:  Role_Assistant,
+				Model: model,
+				Content: mustMarshal(map[string]string{
+					"stop_reason":   string(resultAnthropic.StopReason),
+					"stop_sequence": resultAnthropic.StopSequence,
+				}),
+			}, nil
 		}
+	case providers.ProviderGemini:
+		if len(resultGemini.Candidates) == 0 {
+			return false, nil, fmt.Errorf("response no candidates")
+		}
+		first := resultGemini.Candidates[0]
+		if first.FinishReason == "" {
+			return false, nil, nil
+		}
+		return false, &Message{
+			Type:  MsgType_StopReason,
+			Role:  Role_Assistant,
+			Model: model,
+			Content: mustMarshal(map[string]string{
+				"finish_reason":  string(first.FinishReason),
+				"finish_message": first.FinishMessage,
+			}),
+		}, nil
 	default:
-		return false, fmt.Errorf("stop reason: unsupported provider: %s", c.Provider)
+		return false, nil, fmt.Errorf("stop reason: unsupported provider: %s", c.Provider)
 	}
-	return false, nil
+	return false, nil, nil
 }

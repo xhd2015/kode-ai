@@ -11,6 +11,7 @@ import (
 
 	"github.com/xhd2015/kode-ai/internal/ioread"
 	"github.com/xhd2015/kode-ai/providers"
+	"github.com/xhd2015/kode-ai/tools"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -35,14 +36,13 @@ Available commands:
   help                            show help message
 
 Options:
-  --auto                          enable auto chat mode
-  --max-round N                   maximum number of rounds in agent mode, 0 means no limit(default: 10)
+  --max-round N                   maximum number of chat rounds
   --token TOKEN                   the token
   --base-url BASE_URL             the base url
   --model MODEL                   llm model(default: gpt-4.1)
   --system PROMPT                 set the system prompt, PROMPT can also be a file
   --tool NAME                     predefined tool: batch_read_file,list_dir,grep_search...
-                                  use kode --tool list to see all possible tools
+                                  use kode chat --tool list to see all possible tools
   --tool-custom FILE              tool provided to LLM
   --tool-custom-json JSON         tool provided to LLM, in json, see tool example
   --tool-default-cwd DIR          the default working directory for tools, default current dir
@@ -191,6 +191,16 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		}
 		return showUsageFromRecordFile(recordFile)
 	}
+	if model == "list" {
+		return listModels()
+	}
+	if len(tools) > 0 {
+		for _, tool := range tools {
+			if tool == "list" {
+				return listTools()
+			}
+		}
+	}
 
 	if model == "" {
 		model = providers.ModelGPT4_1
@@ -235,12 +245,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		verbose:            verbose,
 	}
 
-	if model == providers.ModelClaude3_7Sonnet {
-		model = providers.ModelClaude3_7Sonnet_20250219
-	}
-	if model == providers.ModelClaudeSonnet4 {
-		model = providers.ModelClaudeSonnet4_20250514
-	}
+	model = providers.GetUnderlyingModel(model)
 	provider, err := providers.GetModelProvider(model)
 	if err != nil {
 		return err
@@ -255,6 +260,9 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	case providers.ProviderAnthropic:
 		tokenEnvKey = "ANTHROPIC_API_KEY"
 		baseUrlEnvKey = "ANTHROPIC_BASE_URL"
+	case providers.ProviderGemini:
+		tokenEnvKey = "GEMINI_API_KEY"
+		baseUrlEnvKey = "GEMINI_BASE_URL"
 	default:
 		return fmt.Errorf("unsupported provider: %s", provider)
 	}
@@ -266,6 +274,24 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		DefaultBaseUrlEnvKey: "KODE_DEFAULT_BASE_URL",
 	}
 	return c.Handle(model, baseUrl, token, msg, opts)
+}
+
+func listTools() error {
+	toolPresets, err := tools.GetAllPresetTools()
+	if err != nil {
+		return err
+	}
+	for _, tool := range toolPresets {
+		fmt.Println(tool.Name)
+	}
+	return nil
+}
+
+func listModels() error {
+	for _, model := range providers.AllModels {
+		fmt.Println(model)
+	}
+	return nil
 }
 
 // just like replay the whole messages
@@ -462,6 +488,9 @@ kode chat --model=claude-3-7-sonnet --record tmp/cache-test/record.json -v --sys
 # Trace compact
 kode chat --model=claude-sonnet-4 --system tmp/TRACE_PROMPT_STRUCTURE.md "<user_query>please compact slightly the tr
 ee output to save tokens without losing significant information</user_query> current working directory: $PWD/trace_working_dir/some_dir tree output: $(llm-tools tree --collapse --dir-only trace_working_dir/some_dir)"
+
+# Test Gemini
+kode chat --model=gemini-2.5-pro --tool get_workspace_root --tool list_dir --record=chat.json --ignore-duplicate-msg --max-round=10 "What's files under my current directory?" --system="You are a passionate coding agent that actively answer user's question without hesitation. When user asks a question, you understand it aggresively and do it without asking for proceeding."
 `
 
 	fmt.Print(strings.TrimPrefix(examples, "\n"))

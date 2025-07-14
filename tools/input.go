@@ -6,6 +6,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/openai/openai-go"
+	"google.golang.org/genai"
 )
 
 type UnifiedTools []*UnifiedTool
@@ -76,4 +77,23 @@ func (c UnifiedTools) ToAnthropic() ([]anthropic.ToolUnionParam, error) {
 		})
 	}
 	return anthropicTools, nil
+}
+
+func (c UnifiedTools) ToGemini() ([]*genai.Tool, error) {
+	var genaiTools []*genai.FunctionDeclaration
+	for _, tool := range c {
+		genaiTool, err := tool.ToGemini()
+		if err != nil {
+			return nil, err
+		}
+		genaiTools = append(genaiTools, genaiTool)
+	}
+	if len(genaiTools) == 0 {
+		return nil, nil
+	}
+	return []*genai.Tool{
+		{
+			FunctionDeclarations: genaiTools,
+		},
+	}, nil
 }

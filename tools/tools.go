@@ -9,6 +9,7 @@ import (
 	"github.com/openai/openai-go"
 	openai_params "github.com/openai/openai-go/packages/param"
 	"github.com/xhd2015/llm-tools/jsonschema"
+	"google.golang.org/genai"
 )
 
 // UnifiedTool represents a unified tool definition
@@ -72,6 +73,11 @@ func (t *UnifiedTool) ToOpenAI() (*openai.ChatCompletionToolParam, error) {
 // ToAnthropic converts UnifiedTool to Anthropic ToolParam
 func (t *UnifiedTool) ToAnthropic() (*anthropic.ToolParam, error) {
 	return ConvertUnifiedToAnthropic(t)
+}
+
+// ToGemini converts UnifiedTool to Gemini ToolParam
+func (t *UnifiedTool) ToGemini() (*genai.FunctionDeclaration, error) {
+	return ConvertUnifiedToGemini(t)
 }
 
 // ConvertAnthropicToOpenAI converts Anthropic tool format to OpenAI format
@@ -190,6 +196,55 @@ func ConvertUnifiedToAnthropic(unifiedTool *UnifiedTool) (*anthropic.ToolParam, 
 		InputSchema: *params,
 		Type:        "custom",
 	}, nil
+}
+
+func ConvertUnifiedToGemini(unifiedTool *UnifiedTool) (*genai.FunctionDeclaration, error) {
+	return &genai.FunctionDeclaration{
+		// Behavior:    genai.BehaviorBlocking,
+		Description: unifiedTool.Description,
+		Name:        unifiedTool.Name,
+		Parameters:  toGeminiSchema(unifiedTool.Parameters),
+	}, nil
+}
+
+func toGeminiSchema(jschema *jsonschema.JsonSchema) *genai.Schema {
+	if jschema == nil {
+		return nil
+	}
+	return &genai.Schema{
+		Type:        convertToGeminiType(jschema.Type),
+		Description: jschema.Description,
+		Properties:  toGeminiSchemaMap(jschema.Properties),
+		Items:       toGeminiSchema(jschema.Items),
+		Required:    jschema.Required,
+	}
+}
+func toGeminiSchemaMap(jschema map[string]*jsonschema.JsonSchema) map[string]*genai.Schema {
+	if jschema == nil {
+		return nil
+	}
+	schemaMap := make(map[string]*genai.Schema)
+	for k, v := range jschema {
+		schemaMap[k] = toGeminiSchema(v)
+	}
+	return schemaMap
+}
+
+func convertToGeminiType(t jsonschema.ParamType) genai.Type {
+	switch t {
+	case jsonschema.ParamTypeObject:
+		return genai.TypeObject
+	case jsonschema.ParamTypeString:
+		return genai.TypeString
+	case jsonschema.ParamTypeNumber:
+		return genai.TypeNumber
+	case jsonschema.ParamTypeBoolean:
+		return genai.TypeBoolean
+	case jsonschema.ParamTypeArray:
+		return genai.TypeArray
+	default:
+		return genai.Type(t)
+	}
 }
 
 func OpenAIToUnified(tool *openai.ChatCompletionToolParam) (*UnifiedTool, error) {

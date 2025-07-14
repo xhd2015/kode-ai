@@ -13,8 +13,16 @@ const (
 	ModelClaude3_7Sonnet_20250219 = "claude-3-7-sonnet@20250219"
 	ModelClaudeSonnet4            = "claude-sonnet-4" // $3
 	ModelClaudeSonnet4_20250514   = "claude-sonnet-4@20250514"
-	ModelDeepSeekR1               = "DeepSeek-R1"
-	ModelQwen25VL72BInstruct      = "Qwen2.5-VL-72B-Instruct"
+	// Gemini
+	ModelGemini2_0_Flash      = "gemini-2.0-flash"
+	ModelGemini2_0_Flash_001  = "gemini-2.0-flash-001"
+	ModelGemini2_5_Pro        = "gemini-2.5-pro"
+	ModelGemini2_5_Pro_0605   = "gemini-2.5-pro-preview-06-05"
+	ModelGemini2_5_Flash      = "gemini-2.5-flash"
+	ModelGemini2_5_Flash_0520 = "gemini-2.5-flash-preview-05-20"
+
+	ModelDeepSeekR1          = "DeepSeek-R1"
+	ModelQwen25VL72BInstruct = "Qwen2.5-VL-72B-Instruct"
 )
 
 var AllModels = []string{
@@ -30,8 +38,32 @@ var AllModels = []string{
 	ModelGPT4oNano,
 	ModelGPTo4Mini,
 	ModelGPTo3Mini,
+
+	ModelGemini2_0_Flash,
+	ModelGemini2_0_Flash_001,
+	ModelGemini2_5_Pro,
+	ModelGemini2_5_Pro_0605,
+	ModelGemini2_5_Flash,
+	ModelGemini2_5_Flash_0520,
+
 	ModelDeepSeekR1,
 	ModelQwen25VL72BInstruct,
+}
+
+var modelAlias = map[string]string{
+	ModelClaude3_7Sonnet: ModelClaude3_7Sonnet_20250219,
+	ModelClaudeSonnet4:   ModelClaudeSonnet4_20250514,
+	ModelGemini2_0_Flash: ModelGemini2_0_Flash_001,
+	ModelGemini2_5_Pro:   ModelGemini2_5_Pro_0605,
+	ModelGemini2_5_Flash: ModelGemini2_5_Flash_0520,
+}
+
+func GetUnderlyingModel(model string) string {
+	underlyingModel, ok := modelAlias[model]
+	if !ok {
+		return model
+	}
+	return underlyingModel
 }
 
 type ModelCost struct {
@@ -46,6 +78,23 @@ var cluade3_7Cost = ModelCost{
 	InputCacheWriteUSDPer1M: "3.75", // cache has 5minute duration
 	InputCacheReadUSDPer1M:  "0.30",
 	OutputUSDPer1M:          "15.00",
+}
+
+// for <200k input tokens
+var gemini2_0_FlashCost = ModelCost{
+	InputUSDPer1M:          "0.1",
+	InputCacheReadUSDPer1M: "0.025",
+	OutputUSDPer1M:         "0.4",
+}
+var gemini2_5_FlashCost = ModelCost{
+	InputUSDPer1M:          "0.3",
+	InputCacheReadUSDPer1M: "0.075",
+	OutputUSDPer1M:         "2.5",
+}
+var gemini2_5_ProCost_Under200KInput = ModelCost{
+	InputUSDPer1M:          "1.25",
+	InputCacheReadUSDPer1M: "0.31",
+	OutputUSDPer1M:         "10",
 }
 
 var modelCostMapping = map[string]ModelCost{
@@ -95,6 +144,14 @@ var modelCostMapping = map[string]ModelCost{
 	ModelClaude3_7Sonnet_20250219: cluade3_7Cost,
 	ModelClaudeSonnet4:            cluade3_7Cost,
 	ModelClaudeSonnet4_20250514:   cluade3_7Cost,
+
+	// see https://ai.google.dev/gemini-api/docs/pricing
+	ModelGemini2_0_Flash:      gemini2_0_FlashCost,
+	ModelGemini2_0_Flash_001:  gemini2_0_FlashCost,
+	ModelGemini2_5_Pro:        gemini2_5_ProCost_Under200KInput,
+	ModelGemini2_5_Pro_0605:   gemini2_5_ProCost_Under200KInput,
+	ModelGemini2_5_Flash:      gemini2_5_FlashCost,
+	ModelGemini2_5_Flash_0520: gemini2_5_FlashCost,
 }
 
 func GetModelCost(model string) (ModelCost, bool) {
