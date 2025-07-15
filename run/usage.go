@@ -225,3 +225,16 @@ func computeCost(provider providers.Provider, model string, usage TokenUsage) (T
 		InputBreakdown: inputBreakdown,
 	}, true
 }
+
+func printTokenUsage(w io.Writer, title string, tokenUsage TokenUsage, cost string) {
+	fmt.Fprintf(w, "%s - Input: %d, Cache/R: %d, Cache/W: %d, NonCache/R: %d, Output: %d, Total: %d, Cost: %s\n",
+		title,
+		tokenUsage.Input,
+		tokenUsage.InputBreakdown.CacheRead,
+		tokenUsage.InputBreakdown.CacheWrite,
+		tokenUsage.InputBreakdown.NonCacheRead,
+		tokenUsage.Output,
+		tokenUsage.Total,
+		cost,
+	)
+}

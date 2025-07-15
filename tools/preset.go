@@ -26,6 +26,8 @@ var toolNames = []string{
 	"run_terminal_cmd",
 	"grep_search",
 	"read_file",
+	"search_replace",
+	"send_answer",
 }
 
 func getPresetTools(toolPresets []string) ([]*UnifiedTool, error) {

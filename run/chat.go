@@ -4,19 +4,18 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	anth_opt "github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/openai/openai-go"
 	openai_opt "github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
@@ -26,6 +25,7 @@ import (
 	"github.com/xhd2015/kode-ai/providers"
 	anthropic_helper "github.com/xhd2015/kode-ai/providers/anthropic"
 	"github.com/xhd2015/kode-ai/tools"
+	"github.com/xhd2015/llm-tools/jsonschema"
 	"google.golang.org/genai"
 )
 
@@ -46,13 +46,13 @@ type ChatOptions struct {
 	logRequest bool
 	verbose    bool
 	logChat    bool
+
+	// MCP server configuration
+	mcpServers []string
 }
 
 type ChatHandler struct {
-	Provider             providers.Provider
-	TokenEnvKey          string
-	BaseUrlEnvKey        string
-	DefaultBaseUrlEnvKey string
+	Provider providers.Provider
 
 	// openAIKeepMultipleSystemPrompts_DO_NOT_SET only for testing purpose
 	// please do not set it.
@@ -82,15 +82,12 @@ type MessageHistoryUnion struct {
 	Gemini    []*genai.Content
 }
 
-type ToolsUnion struct {
-}
-
 func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg string, opts ChatOptions) error {
 	toolPresets := opts.toolPresets
 	recordFile := opts.recordFile
 	ignoreDuplicateMsg := opts.ignoreDuplicateMsg
 	maxRound := opts.maxRound
-	defaultToolCwd := opts.toolDefaultCwd
+	absDefaultToolCwd := opts.toolDefaultCwd
 	openAIKeepMultipleSystemPrompts := c.openAIKeepMultipleSystemPrompts_DO_NOT_SET
 
 	noCache := opts.noCache
@@ -100,36 +97,6 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 	logChat := opts.logChat
 
 	_ = verbose
-
-	var absDefaultToolCwd string
-	if defaultToolCwd != "" {
-		var err error
-		absDefaultToolCwd, err = filepath.Abs(defaultToolCwd)
-		if err != nil {
-			return err
-		}
-	}
-
-	if token == "" {
-		var envOption string
-		if c.TokenEnvKey != "" {
-			token = os.Getenv(c.TokenEnvKey)
-			envOption = " or " + c.TokenEnvKey
-		}
-		if token == "" {
-			return errors.New("requires --token" + envOption)
-		}
-	}
-	if baseUrl == "" {
-		var envBaseURL string
-		if c.BaseUrlEnvKey != "" {
-			envBaseURL = os.Getenv(c.BaseUrlEnvKey)
-		}
-		if envBaseURL == "" && c.DefaultBaseUrlEnvKey != "" {
-			envBaseURL = os.Getenv(c.DefaultBaseUrlEnvKey)
-		}
-		baseUrl = envBaseURL
-	}
 
 	// Load historical messages from record file if it exists
 	historyMsgs, err := c.readHistoryMessages(recordFile, openAIKeepMultipleSystemPrompts)
@@ -158,15 +125,65 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 	clientAnthropic := clients.Anthropic
 	clientGemini := clients.Gemini
 
+	toolInfoMapping := make(ToolInfoMapping)
 	toolSchemas, err := tools.ParseSchemas(opts.toolFiles, opts.toolJSONs)
 	if err != nil {
 		return err
 	}
+	for _, tool := range toolSchemas {
+		if err := toolInfoMapping.AddTool(tool.Name, &ToolInfo{
+			Name:           tool.Name,
+			ToolDefinition: tool,
+		}); err != nil {
+			return err
+		}
+	}
+
 	presetTools, err := tools.GetPresetTools(toolPresets)
 	if err != nil {
 		return err
 	}
+	for _, tool := range presetTools {
+		if err := toolInfoMapping.AddTool(tool.Name, &ToolInfo{
+			Name:           tool.Name,
+			Preset:         true,
+			ToolDefinition: tool,
+		}); err != nil {
+			return err
+		}
+	}
 	toolSchemas = append(toolSchemas, presetTools...)
+
+	// Setup MCP client if configured
+	for _, mcpServer := range opts.mcpServers {
+		mcpClient, err := connectToMCPServer(mcpServer)
+		if err != nil {
+			return fmt.Errorf("connect to MCP server: %v", err)
+		}
+		res, err := mcpClient.Initialize(ctx, mcp.InitializeRequest{})
+		if err != nil {
+			return fmt.Errorf("initialize MCP client: %v", err)
+		}
+		_ = res
+
+		// Get MCP tools and add them to the tool schemas
+		mcpTools, err := getMCPTools(ctx, mcpClient)
+		if err != nil {
+			return fmt.Errorf("list mcp tools: %s %w", opts.mcpServers, err)
+		}
+		// validate
+		for _, tool := range mcpTools {
+			if err := toolInfoMapping.AddTool(tool.Name, &ToolInfo{
+				Name:           tool.Name,
+				MCPServer:      mcpServer,
+				MCPClient:      mcpClient,
+				ToolDefinition: tool,
+			}); err != nil {
+				return err
+			}
+		}
+		toolSchemas = append(toolSchemas, mcpTools...)
+	}
 
 	var toolsOpenAI []openai.ChatCompletionToolParam
 	var toolsAnthropic []anthropic.ToolUnionParam
@@ -384,7 +401,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		var newToolUseNum int
 		switch c.Provider {
 		case providers.ProviderOpenAI:
-			res, err := c.processOpenAIResponse(resultOpenAI, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets)
+			res, err := c.processOpenAIResponse(ctx, resultOpenAI, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets, toolInfoMapping)
 			if err != nil {
 				return err
 			}
@@ -397,7 +414,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 
 			newToolUseNum = res.ToolUseNum
 		case providers.ProviderAnthropic:
-			res, err := c.processAnthropicResponse(resultAnthropic, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets)
+			res, err := c.processAnthropicResponse(ctx, resultAnthropic, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets, toolInfoMapping)
 			if err != nil {
 				return err
 			}
@@ -418,7 +435,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			}
 			newToolUseNum = res.ToolUseNum
 		case providers.ProviderGemini:
-			res, err := c.processGeminiResponse(resultGemini, toolUseNum, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets)
+			res, err := c.processGeminiResponse(ctx, resultGemini, toolUseNum, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets, toolInfoMapping)
 			if err != nil {
 				return err
 			}
@@ -491,19 +508,6 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 	}
 
 	return nil
-}
-
-func printTokenUsage(w io.Writer, title string, tokenUsage TokenUsage, cost string) {
-	fmt.Fprintf(w, "%s - Input: %d, Cache/R: %d, Cache/W: %d, NonCache/R: %d, Output: %d, Total: %d, Cost: %s\n",
-		title,
-		tokenUsage.Input,
-		tokenUsage.InputBreakdown.CacheRead,
-		tokenUsage.InputBreakdown.CacheWrite,
-		tokenUsage.InputBreakdown.NonCacheRead,
-		tokenUsage.Output,
-		tokenUsage.Total,
-		cost,
-	)
 }
 
 func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleSystemPrompts bool) (*MessageHistoryUnion, error) {
@@ -792,7 +796,7 @@ type ResponseResultOpenAI struct {
 	TokenUsage  TokenUsage
 }
 
-func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string) (*ResponseResultOpenAI, error) {
+func (c *ChatHandler) processOpenAIResponse(ctx context.Context, resultOpenAI *openai.ChatCompletion, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultOpenAI, error) {
 	if len(resultOpenAI.Choices) == 0 {
 		return nil, fmt.Errorf("response no choices")
 	}
@@ -858,7 +862,7 @@ func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion,
 		}
 
 		// Check if tool name matches a preset and execute it
-		result, ok := executePresetTool(toolCall.Function.Name, toolCall.Function.Arguments, defaultToolCwd, toolPresets)
+		result, ok := executeTool(ctx, toolCall.Function.Name, toolCall.Function.Arguments, defaultToolCwd, toolPresets, mcpInfoMapping)
 		if ok {
 			toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
 			fmt.Println(toolResultStr)
@@ -918,13 +922,14 @@ func (c *ChatHandler) processOpenAIResponse(resultOpenAI *openai.ChatCompletion,
 }
 
 type ResponseResultAnthropic struct {
-	ToolUseNum  int
+	ToolUseNum int
+
 	Messages    []anthropic.ContentBlockParamUnion
 	ToolResults []anthropic.ContentBlockParamUnion
 	TokenUsage  TokenUsage
 }
 
-func (c *ChatHandler) processAnthropicResponse(resultAnthropic *anthropic.Message, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string) (*ResponseResultAnthropic, error) {
+func (c *ChatHandler) processAnthropicResponse(ctx context.Context, resultAnthropic *anthropic.Message, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultAnthropic, error) {
 	var toolUseNum int
 	var respContents []anthropic.ContentBlockParamUnion
 	var toolResults []anthropic.ContentBlockParamUnion
@@ -984,7 +989,7 @@ func (c *ChatHandler) processAnthropicResponse(resultAnthropic *anthropic.Messag
 
 			// Check if tool name matches a preset and execute it
 
-			result, ok := executePresetTool(toolUse.Name, string(toolUse.Input), defaultToolCwd, toolPresets)
+			result, ok := executeTool(ctx, toolUse.Name, string(toolUse.Input), defaultToolCwd, toolPresets, mcpInfoMapping)
 			if ok {
 				toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
 				fmt.Println(toolResultStr)
@@ -1051,7 +1056,7 @@ type ResponseResultGemini struct {
 	TokenUsage  TokenUsage
 }
 
-func (c *ChatHandler) processGeminiResponse(resultGemini *genai.GenerateContentResponse, toolUsedNum int, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string) (*ResponseResultGemini, error) {
+func (c *ChatHandler) processGeminiResponse(ctx context.Context, resultGemini *genai.GenerateContentResponse, toolUsedNum int, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultGemini, error) {
 	var toolUseNum int
 	var respContents []*genai.Content
 	var toolResults []*genai.Content
@@ -1109,7 +1114,7 @@ func (c *ChatHandler) processGeminiResponse(resultGemini *genai.GenerateContentR
 				}
 			}
 
-			result, ok := executePresetTool(toolUse.Name, argsJSONStr, defaultToolCwd, toolPresets)
+			result, ok := executeTool(ctx, toolUse.Name, argsJSONStr, defaultToolCwd, toolPresets, mcpInfoMapping)
 			if ok {
 				toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
 				fmt.Println(toolResultStr)
@@ -1250,4 +1255,86 @@ func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, res
 		return false, nil, fmt.Errorf("stop reason: unsupported provider: %s", c.Provider)
 	}
 	return false, nil, nil
+}
+
+// MCP client functionality
+func connectToMCPServer(mcpServerSpec string) (*client.Client, error) {
+	if mcpServerSpec == "" {
+		return nil, nil
+	}
+
+	// Parse MCP server specification
+	// Format: ip:port for network connection, or command for CLI
+	if strings.Contains(mcpServerSpec, ":") {
+		// Network connection (ip:port) - not supported by mark3labs/mcp-go directly
+		return nil, fmt.Errorf("network MCP connections not yet supported by this client library")
+	} else {
+		// CLI connection - use client package
+		mcpClient, err := client.NewStdioMCPClient(mcpServerSpec, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create MCP client: %w", err)
+		}
+		return mcpClient, nil
+	}
+}
+
+func getMCPTools(ctx context.Context, mcpClient *client.Client) ([]*tools.UnifiedTool, error) {
+	// Get tools from MCP server
+	toolsResponse, err := mcpClient.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list MCP tools: %w", err)
+	}
+
+	var unifiedTools []*tools.UnifiedTool
+	for _, tool := range toolsResponse.Tools {
+		// Convert MCP tool to unified tool format
+		// Since UnifiedTool doesn't have a handler field, we'll create a basic schema representation
+		description := tool.Description
+
+		// Convert the MCP tool's input schema to our jsonschema format
+		var parameters *jsonschema.JsonSchema
+		if tool.InputSchema.Type != "" {
+			parameters = &jsonschema.JsonSchema{
+				Type:        jsonschema.ParamType(tool.InputSchema.Type),
+				Properties:  convertMCPProperties(tool.InputSchema.Properties),
+				Required:    tool.InputSchema.Required,
+				Description: description,
+			}
+		}
+
+		unifiedTool := &tools.UnifiedTool{
+			Name:        tool.Name,
+			Description: description,
+			Parameters:  parameters,
+		}
+		unifiedTools = append(unifiedTools, unifiedTool)
+	}
+
+	return unifiedTools, nil
+}
+
+// Helper function to convert MCP properties to our jsonschema format
+func convertMCPProperties(mcpProps map[string]interface{}) map[string]*jsonschema.JsonSchema {
+	if mcpProps == nil {
+		return nil
+	}
+
+	props := make(map[string]*jsonschema.JsonSchema)
+	for name, prop := range mcpProps {
+		if propMap, ok := prop.(map[string]interface{}); ok {
+			schema := &jsonschema.JsonSchema{}
+			if typeVal, exists := propMap["type"]; exists {
+				if typeStr, ok := typeVal.(string); ok {
+					schema.Type = jsonschema.ParamType(typeStr)
+				}
+			}
+			if desc, exists := propMap["description"]; exists {
+				if descStr, ok := desc.(string); ok {
+					schema.Description = descStr
+				}
+			}
+			props[name] = schema
+		}
+	}
+	return props
 }

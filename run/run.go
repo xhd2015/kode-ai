@@ -3,9 +3,11 @@ package run
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -47,6 +49,7 @@ Options:
   --tool-custom-json JSON         tool provided to LLM, in json, see tool example
   --tool-default-cwd DIR          the default working directory for tools, default current dir
                                   use --tool-default-cwd='' to unset it
+  --mcp SERVER                    connect to MCP server (ip:port or command)
   --record FILE                   record chat history to given json file, which can be used to store and resume the chat
   --no-cache                      disable token caching
   --show-usage                    show usage from the file specified by --record
@@ -61,6 +64,10 @@ Examples:
   # provide tools to LLM
   kode chat --max-round=10 --tool list_dir "What's in current dir? wd is: $PWD"
 
+  # connect to MCP server
+  kode chat --mcp "localhost:8080" "What tools are available?"
+  kode chat --mcp "my-mcp-server-command" "Execute a task"
+
   # agent-like chat
   kode chat --record tmp/chat.json --model=claude-3-7-sonnet --system=tmp/TRACE_PROMPT_CURSOR_LIKE.md --tool-preset=batch_read_file --tool-preset=list_dir --tool-preset=run_terminal_cmd -v --ignore-duplicate-msg "<user_query>gather some critical information for it</user_query>"
 
@@ -68,7 +75,7 @@ Examples:
   kode chat --record tmp/chat.json --model=claude-3-7-sonnet --show-usage
 
 Tool example:
-  open-ai: '{"name":"record_names","description":"record the names needed to analyse","parameters":{"type":"object","properties":{"names":{"type":"array","description":"the names needed to analyse","items":{"type":"string"}}},"required":["names"]}}'
+  kode example --tool
 
 Available models:
   open-ai: gpt-4.1, gpt-4.1-mini, gpt-4o, gpt-4o-mini, gpt-4o-nano, o4-mini, o3
@@ -162,6 +169,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var logRequest bool
 	var logChat bool = true
 	var verbose bool
+	var mcpServers []string
 
 	flagsParser := flags.String("--token", &token).
 		Int("--max-round", &maxRound).
@@ -179,6 +187,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		Bool("--log-request", &logRequest).
 		Bool("--log-chat", &logChat).
 		Bool("-v,--verbose", &verbose).
+		StringSlice("--mcp", &mcpServers).
 		Help("-h,--help", getHelp(baesCmd))
 
 	args, err = flagsParser.Parse(args)
@@ -227,7 +236,21 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		}
 	}
 
-	opts := ChatOptions{
+	model = providers.GetUnderlyingModel(model)
+	provider, err := providers.GetModelProvider(model)
+	if err != nil {
+		return err
+	}
+
+	resolvedOpts, err := ResolveProviderDefaultEnvOptions(provider, toolDefaultCwd, token, baseUrl)
+	if err != nil {
+		return err
+	}
+
+	c := ChatHandler{
+		Provider: provider,
+	}
+	return c.Handle(model, resolvedOpts.BaseUrl, resolvedOpts.Token, msg, ChatOptions{
 		maxRound: maxRound,
 
 		systemPrompt:   systemPrompt,
@@ -236,21 +259,25 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		toolFiles:      toolCustomFiles,
 		toolJSONs:      toolCustomJSONs,
 		recordFile:     recordFile,
-		toolDefaultCwd: toolDefaultCwd,
+		toolDefaultCwd: resolvedOpts.AbsDefaultToolCwd,
 
 		noCache: noCache,
 
 		ignoreDuplicateMsg: ignoreDuplicateMsg,
 		logChat:            logChat,
 		verbose:            verbose,
-	}
 
-	model = providers.GetUnderlyingModel(model)
-	provider, err := providers.GetModelProvider(model)
-	if err != nil {
-		return err
-	}
+		mcpServers: mcpServers,
+	})
+}
 
+type ResolvedOptions struct {
+	AbsDefaultToolCwd string
+	Token             string
+	BaseUrl           string
+}
+
+func ResolveProviderDefaultEnvOptions(provider providers.Provider, defaultToolCwd string, token string, baseUrl string) (ResolvedOptions, error) {
 	var tokenEnvKey string
 	var baseUrlEnvKey string
 	switch provider {
@@ -264,27 +291,51 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		tokenEnvKey = "GEMINI_API_KEY"
 		baseUrlEnvKey = "GEMINI_BASE_URL"
 	default:
-		return fmt.Errorf("unsupported provider: %s", provider)
+		return ResolvedOptions{}, fmt.Errorf("unsupported provider: %s", provider)
 	}
 
-	c := ChatHandler{
-		Provider:             provider,
-		TokenEnvKey:          tokenEnvKey,
-		BaseUrlEnvKey:        baseUrlEnvKey,
-		DefaultBaseUrlEnvKey: "KODE_DEFAULT_BASE_URL",
+	resolvedOpts, err := ResolveEnvOptions(defaultToolCwd, token, tokenEnvKey, baseUrl, baseUrlEnvKey, "KODE_DEFAULT_BASE_URL")
+	if err != nil {
+		return ResolvedOptions{}, err
 	}
-	return c.Handle(model, baseUrl, token, msg, opts)
+	return resolvedOpts, nil
 }
 
-func listTools() error {
-	toolPresets, err := tools.GetAllPresetTools()
-	if err != nil {
-		return err
+func ResolveEnvOptions(defaultToolCwd string, token string, tokenEnvKey string, baseUrl string, baseUrlEnvKey string, defaultBaseUrlEnvKey string) (ResolvedOptions, error) {
+	var absDefaultToolCwd string
+	if defaultToolCwd != "" {
+		var err error
+		absDefaultToolCwd, err = filepath.Abs(defaultToolCwd)
+		if err != nil {
+			return ResolvedOptions{}, err
+		}
 	}
-	for _, tool := range toolPresets {
-		fmt.Println(tool.Name)
+
+	if token == "" {
+		var envOption string
+		if tokenEnvKey != "" {
+			token = os.Getenv(tokenEnvKey)
+			envOption = " or " + tokenEnvKey
+		}
+		if token == "" {
+			return ResolvedOptions{}, errors.New("requires --token" + envOption)
+		}
 	}
-	return nil
+	if baseUrl == "" {
+		var envBaseURL string
+		if baseUrlEnvKey != "" {
+			envBaseURL = os.Getenv(baseUrlEnvKey)
+		}
+		if envBaseURL == "" && defaultBaseUrlEnvKey != "" {
+			envBaseURL = os.Getenv(defaultBaseUrlEnvKey)
+		}
+		baseUrl = envBaseURL
+	}
+	return ResolvedOptions{
+		AbsDefaultToolCwd: absDefaultToolCwd,
+		Token:             token,
+		BaseUrl:           baseUrl,
+	}, nil
 }
 
 func listModels() error {
@@ -293,6 +344,22 @@ func listModels() error {
 	}
 	return nil
 }
+
+const viewHelp = `
+kode view <files...>
+
+Options:
+  --last-assistant                show the last assistant message
+  --show-usage                    show usage from the file specified by --record
+  --tools                         show tools used in the chats
+  -v,--verbose                    show verbose info
+
+Examples:
+  kode view tmp/chat.json
+  kode view tmp/chat.json --last-assistant
+  kode view tmp/chat.json --show-usage
+  kode view tmp/chat.json --tools
+`
 
 // just like replay the whole messages
 func handleView(args []string) error {
@@ -304,12 +371,17 @@ func handleView(args []string) error {
 		Bool("--last-assistant", &lastAssistant).
 		Bool("--show-usage", &showUsage).
 		Bool("--tools", &tools).
+		Help("-h,--help", viewHelp).
 		Parse(args)
 	if err != nil {
 		return err
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("requires files")
+		return fmt.Errorf("requires files, try `kode view --help`")
+	}
+	if args[0] == "--help" || args[0] == "help" {
+		fmt.Print(strings.TrimPrefix(viewHelp, "\n"))
+		return nil
 	}
 
 	if showUsage && lastAssistant {
@@ -472,6 +544,17 @@ func appendToRecordFile(recordFile string, msg *Message) error {
 }
 
 func handleExample(args []string) error {
+	var tool bool
+
+	args, err := flags.Bool("--tool", &tool).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+	if tool {
+		fmt.Println(tools.ExampleTool)
+		return nil
+	}
 	const examples = `
 # fetch trace first
 spl trace 5096cd609a7ddb8841b810d0dfa37b65 --dump tmp

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	_ "embed"
+
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropic_params "github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/openai/openai-go"
@@ -12,12 +14,18 @@ import (
 	"google.golang.org/genai"
 )
 
+//go:embed example_tool.json
+var ExampleTool string
+
 // UnifiedTool represents a unified tool definition
 type UnifiedTool struct {
 	Format      string                 `json:"format,omitempty"`
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	Parameters  *jsonschema.JsonSchema `json:"parameters,omitempty"`
+
+	// command to be executed
+	Command []string `json:"command"`
 }
 
 // Parse parses a unified tool definition from JSON bytes

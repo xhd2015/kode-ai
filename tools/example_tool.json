@@ -15,5 +15,9 @@
         "required": [
             "names"
         ]
-    }
+    },
+    "command": [
+        "echo",
+        "names: $names"
+    ]
 }
