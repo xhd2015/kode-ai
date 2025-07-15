@@ -14,7 +14,6 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	anth_opt "github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/openai/openai-go"
 	openai_opt "github.com/openai/openai-go/option"
@@ -25,7 +24,6 @@ import (
 	"github.com/xhd2015/kode-ai/providers"
 	anthropic_helper "github.com/xhd2015/kode-ai/providers/anthropic"
 	"github.com/xhd2015/kode-ai/tools"
-	"github.com/xhd2015/llm-tools/jsonschema"
 	"google.golang.org/genai"
 )
 
@@ -1255,86 +1253,4 @@ func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, res
 		return false, nil, fmt.Errorf("stop reason: unsupported provider: %s", c.Provider)
 	}
 	return false, nil, nil
-}
-
-// MCP client functionality
-func connectToMCPServer(mcpServerSpec string) (*client.Client, error) {
-	if mcpServerSpec == "" {
-		return nil, nil
-	}
-
-	// Parse MCP server specification
-	// Format: ip:port for network connection, or command for CLI
-	if strings.Contains(mcpServerSpec, ":") {
-		// Network connection (ip:port) - not supported by mark3labs/mcp-go directly
-		return nil, fmt.Errorf("network MCP connections not yet supported by this client library")
-	} else {
-		// CLI connection - use client package
-		mcpClient, err := client.NewStdioMCPClient(mcpServerSpec, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create MCP client: %w", err)
-		}
-		return mcpClient, nil
-	}
-}
-
-func getMCPTools(ctx context.Context, mcpClient *client.Client) ([]*tools.UnifiedTool, error) {
-	// Get tools from MCP server
-	toolsResponse, err := mcpClient.ListTools(ctx, mcp.ListToolsRequest{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list MCP tools: %w", err)
-	}
-
-	var unifiedTools []*tools.UnifiedTool
-	for _, tool := range toolsResponse.Tools {
-		// Convert MCP tool to unified tool format
-		// Since UnifiedTool doesn't have a handler field, we'll create a basic schema representation
-		description := tool.Description
-
-		// Convert the MCP tool's input schema to our jsonschema format
-		var parameters *jsonschema.JsonSchema
-		if tool.InputSchema.Type != "" {
-			parameters = &jsonschema.JsonSchema{
-				Type:        jsonschema.ParamType(tool.InputSchema.Type),
-				Properties:  convertMCPProperties(tool.InputSchema.Properties),
-				Required:    tool.InputSchema.Required,
-				Description: description,
-			}
-		}
-
-		unifiedTool := &tools.UnifiedTool{
-			Name:        tool.Name,
-			Description: description,
-			Parameters:  parameters,
-		}
-		unifiedTools = append(unifiedTools, unifiedTool)
-	}
-
-	return unifiedTools, nil
-}
-
-// Helper function to convert MCP properties to our jsonschema format
-func convertMCPProperties(mcpProps map[string]interface{}) map[string]*jsonschema.JsonSchema {
-	if mcpProps == nil {
-		return nil
-	}
-
-	props := make(map[string]*jsonschema.JsonSchema)
-	for name, prop := range mcpProps {
-		if propMap, ok := prop.(map[string]interface{}); ok {
-			schema := &jsonschema.JsonSchema{}
-			if typeVal, exists := propMap["type"]; exists {
-				if typeStr, ok := typeVal.(string); ok {
-					schema.Type = jsonschema.ParamType(typeStr)
-				}
-			}
-			if desc, exists := propMap["description"]; exists {
-				if descStr, ok := desc.(string); ok {
-					schema.Description = descStr
-				}
-			}
-			props[name] = schema
-		}
-	}
-	return props
 }
