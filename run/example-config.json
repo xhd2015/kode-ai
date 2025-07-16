@@ -1,0 +1,39 @@
+{
+    "model": "claude-3-7-sonnet",
+    "max_round": 5,
+    "tools": [
+        "list_dir",
+        "read_file"
+    ],
+    "system": [],
+    "tool_custom_jsons": [
+        {
+            "name": "example_tool",
+            "description": "An example tool for testing",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "A message to process"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "Number of times to repeat"
+                    }
+                },
+                "required": [
+                    "message"
+                ]
+            },
+            "command": [
+                "echo",
+                "Message: $message, Count: $count"
+            ]
+        }
+    ],
+    "verbose": true,
+    "log_chat": true,
+    "ignore_duplicate_msg": true,
+    "record_file": "test_chat.json"
+}

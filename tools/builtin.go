@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/xhd2015/llm-tools/tools/batch_read_file"
 	"github.com/xhd2015/llm-tools/tools/defs"
@@ -16,6 +17,7 @@ import (
 	"github.com/xhd2015/llm-tools/tools/search_replace"
 	"github.com/xhd2015/llm-tools/tools/send_answer"
 	"github.com/xhd2015/llm-tools/tools/todo_write"
+	"github.com/xhd2015/llm-tools/tools/write_file"
 
 	// "github.com/xhd2015/llm-tools/tools/tree"
 	"github.com/xhd2015/llm-tools/tools/web_search"
@@ -28,7 +30,6 @@ type ExecutorInfo struct {
 }
 
 // TODO: add tree
-
 var tools = []*ExecutorInfo{
 	{
 		Name:       "get_workspace_root",
@@ -54,6 +55,11 @@ var tools = []*ExecutorInfo{
 		Name:       "grep_search",
 		Definition: grep_search.GetToolDefinition(),
 		Executor:   GrepSearchExecutor{},
+	},
+	{
+		Name:       "write_file",
+		Definition: write_file.GetToolDefinition(),
+		Executor:   WriteFileExecutor{},
 	},
 	{
 		Name:       "read_file",
@@ -118,12 +124,12 @@ type Executor interface {
 	Execute(arguments string, opts ExecuteOptions) (interface{}, error)
 }
 
-func GetPresetTools(toolPresets []string) ([]*UnifiedTool, error) {
-	return getPresetTools(toolPresets)
+func GetBuiltinTools(toolBuiltins []string) ([]*UnifiedTool, error) {
+	return getBuiltinTools(toolBuiltins)
 }
 
-func GetAllPresetTools() ([]*UnifiedTool, error) {
-	return getPresetTools(allTools)
+func GetAllBuiltinTools() ([]*UnifiedTool, error) {
+	return getBuiltinTools(allTools)
 }
 
 var toolMapping = buildToolMapping(tools)
@@ -137,21 +143,21 @@ func buildToolMapping(tools []*ExecutorInfo) map[string]*ExecutorInfo {
 	return toolMapping
 }
 func buildToolNames(tools []*ExecutorInfo) []string {
-	toolNames := make([]string, len(tools))
+	toolNames := make([]string, 0, len(tools))
 	for _, tool := range tools {
 		toolNames = append(toolNames, tool.Name)
 	}
 	return toolNames
 }
 
-func getPresetTools(toolPresets []string) ([]*UnifiedTool, error) {
-	tools := make([]*UnifiedTool, 0, len(toolPresets))
-	for _, preset := range toolPresets {
-		presetTool := toolMapping[preset]
-		if presetTool == nil {
-			return nil, fmt.Errorf("unrecognized tool preset: %s, available: get_workspace_root, batch_read_file, list_dir, run_terminal_cmd, grep_search, read_file", preset)
+func getBuiltinTools(builtinTools []string) ([]*UnifiedTool, error) {
+	tools := make([]*UnifiedTool, 0, len(builtinTools))
+	for _, builtinTool := range builtinTools {
+		builtinToolInfo := toolMapping[builtinTool]
+		if builtinToolInfo == nil {
+			return nil, fmt.Errorf("unrecognized builtin tool: %s, available: %s", builtinTool, strings.Join(allTools, ", "))
 		}
-		toolDef := presetTool.Definition
+		toolDef := builtinToolInfo.Definition
 		tools = append(tools, &UnifiedTool{
 			Name:        toolDef.Name,
 			Description: toolDef.Description,
@@ -222,6 +228,20 @@ func (e GrepSearchExecutor) Execute(arguments string, opts ExecuteOptions) (inte
 		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
 	}
 	return grep_search.GrepSearch(req)
+}
+
+type WriteFileExecutor struct {
+}
+
+func (e WriteFileExecutor) Execute(arguments string, opts ExecuteOptions) (interface{}, error) {
+	req, err := write_file.ParseJSONRequest(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("parse args: %v", err)
+	}
+	if req.WorkspaceRoot == "" && opts.DefaultWorkspaceRoot != "" {
+		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
+	}
+	return write_file.WriteFile(req)
 }
 
 type ReadFileExecutor struct {

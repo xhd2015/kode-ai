@@ -17,16 +17,8 @@ import (
 //go:embed example_tool.json
 var ExampleTool string
 
-// UnifiedTool represents a unified tool definition
-type UnifiedTool struct {
-	Format      string                 `json:"format,omitempty"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
-	Parameters  *jsonschema.JsonSchema `json:"parameters,omitempty"`
-
-	// command to be executed
-	Command []string `json:"command"`
-}
+//go:embed unified_tool.go
+var UnifiedToolDef string
 
 // Parse parses a unified tool definition from JSON bytes
 func Parse(data []byte) (*UnifiedTool, error) {

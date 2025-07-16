@@ -31,7 +31,7 @@ type ChatOptions struct {
 	maxRound int
 
 	systemPrompt string
-	toolPresets  []string
+	toolBuiltins []string
 	toolFiles    []string
 	toolJSONs    []string
 	recordFile   string
@@ -81,7 +81,7 @@ type MessageHistoryUnion struct {
 }
 
 func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg string, opts ChatOptions) error {
-	toolPresets := opts.toolPresets
+	toolBuiltins := opts.toolBuiltins
 	recordFile := opts.recordFile
 	ignoreDuplicateMsg := opts.ignoreDuplicateMsg
 	maxRound := opts.maxRound
@@ -137,20 +137,20 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		}
 	}
 
-	presetTools, err := tools.GetPresetTools(toolPresets)
+	builtinTools, err := tools.GetBuiltinTools(toolBuiltins)
 	if err != nil {
 		return err
 	}
-	for _, tool := range presetTools {
+	for _, tool := range builtinTools {
 		if err := toolInfoMapping.AddTool(tool.Name, &ToolInfo{
 			Name:           tool.Name,
-			Preset:         true,
+			Builtin:        true,
 			ToolDefinition: tool,
 		}); err != nil {
 			return err
 		}
 	}
-	toolSchemas = append(toolSchemas, presetTools...)
+	toolSchemas = append(toolSchemas, builtinTools...)
 
 	// Setup MCP client if configured
 	for _, mcpServer := range opts.mcpServers {
@@ -859,7 +859,7 @@ func (c *ChatHandler) processOpenAIResponse(ctx context.Context, resultOpenAI *o
 			}
 		}
 
-		// Check if tool name matches a preset and execute it
+		// Check if tool name matches a builtin and execute it
 		result, ok := executeTool(ctx, toolCall.Function.Name, toolCall.Function.Arguments, defaultToolCwd, mcpInfoMapping)
 		if ok {
 			toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
@@ -985,8 +985,7 @@ func (c *ChatHandler) processAnthropicResponse(ctx context.Context, resultAnthro
 				}
 			}
 
-			// Check if tool name matches a preset and execute it
-
+			// Check if tool name matches a builtin and execute it
 			result, ok := executeTool(ctx, toolUse.Name, string(toolUse.Input), defaultToolCwd, mcpInfoMapping)
 			if ok {
 				toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))

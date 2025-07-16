@@ -48,7 +48,7 @@ Options:
   --tool-custom FILE              tool provided to LLM
   --tool-custom-json JSON         tool provided to LLM, in json, see tool example
   --tool-default-cwd DIR          the default working directory for tools, default current dir
-                                  use --tool-default-cwd='' to unset it
+                                  use --tool-default-cwd=none to unset it
   --mcp SERVER                    connect to MCP server (ip:port or command)
   --record FILE                   record chat history to given json file, which can be used to store and resume the chat
   --no-cache                      disable token caching
@@ -56,6 +56,7 @@ Options:
   --ignore-duplicate-msg          ignore duplicate user msg
   --log-request                   log http request
   --log-chat                      log chat(default: true)
+  -c,--config FILE                load configuration from JSON file
   -v,--verbose                    show verbose info
 
 Examples:
@@ -69,7 +70,7 @@ Examples:
   kode chat --mcp "my-mcp-server-command" "Execute a task"
 
   # agent-like chat
-  kode chat --record tmp/chat.json --model=claude-3-7-sonnet --system=tmp/TRACE_PROMPT_CURSOR_LIKE.md --tool-preset=batch_read_file --tool-preset=list_dir --tool-preset=run_terminal_cmd -v --ignore-duplicate-msg "<user_query>gather some critical information for it</user_query>"
+  kode chat --record tmp/chat.json --model=claude-3-7-sonnet --system=tmp/TRACE_PROMPT_CURSOR_LIKE.md --tool=batch_read_file --tool=list_dir --tool=run_terminal_cmd -v --ignore-duplicate-msg "<user_query>gather some critical information for it</user_query>"
 
   # show token usage
   kode chat --record tmp/chat.json --model=claude-3-7-sonnet --show-usage
@@ -162,7 +163,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var showUsage bool
 	var ignoreDuplicateMsg bool
 
-	var toolDefaultCwd string = cwd
+	var toolDefaultCwd string
 	var maxRound int
 	var noCache bool
 
@@ -170,6 +171,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var logChat bool = true
 	var verbose bool
 	var mcpServers []string
+	var configFile string
 
 	flagsParser := flags.String("--token", &token).
 		Int("--max-round", &maxRound).
@@ -188,12 +190,44 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		Bool("--log-chat", &logChat).
 		Bool("-v,--verbose", &verbose).
 		StringSlice("--mcp", &mcpServers).
+		String("-c,--config", &configFile).
 		Help("-h,--help", getHelp(baesCmd))
 
 	args, err = flagsParser.Parse(args)
 	if err != nil {
 		return err
 	}
+
+	if len(tools) > 0 {
+		for _, tool := range tools {
+			if tool == "list" {
+				return listTools()
+			}
+		}
+	}
+
+	// Load and apply configuration file
+	config, err := LoadConfig(configFile)
+	if err != nil {
+		return err
+	}
+
+	err = ApplyConfig(config, &token, &maxRound, &baseUrl, &model, &systemPrompt, &tools, &toolCustomFiles, &toolCustomJSONs, &toolDefaultCwd, &recordFile, &noCache, &showUsage, &ignoreDuplicateMsg, &logRequest, &logChat, &verbose, &mcpServers)
+	if err != nil {
+		return err
+	}
+
+	if toolDefaultCwd == "" {
+		toolDefaultCwd = cwd
+	} else if toolDefaultCwd == "none" {
+		stat, _ := os.Stat("none")
+		if stat == nil {
+			toolDefaultCwd = ""
+		}
+	} else if toolDefaultCwd == "/none" || toolDefaultCwd == "NONE" {
+		toolDefaultCwd = ""
+	}
+
 	if showUsage {
 		if recordFile == "" {
 			return fmt.Errorf("requires --record")
@@ -202,13 +236,6 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	}
 	if model == "list" {
 		return listModels()
-	}
-	if len(tools) > 0 {
-		for _, tool := range tools {
-			if tool == "list" {
-				return listTools()
-			}
-		}
 	}
 
 	if model == "" {
@@ -259,7 +286,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 
 		systemPrompt:   systemPrompt,
 		logRequest:     logRequest,
-		toolPresets:    tools,
+		toolBuiltins:   tools,
 		toolFiles:      toolCustomFiles,
 		toolJSONs:      toolCustomJSONs,
 		recordFile:     recordFile,
@@ -558,8 +585,11 @@ func appendToRecordFile(recordFile string, msg *Message) error {
 
 func handleExample(args []string) error {
 	var tool bool
-
+	var config bool
+	var configDef bool
 	args, err := flags.Bool("--tool", &tool).
+		Bool("--config", &config).
+		Bool("--config-def", &configDef).
 		Parse(args)
 	if err != nil {
 		return err
@@ -568,12 +598,23 @@ func handleExample(args []string) error {
 		fmt.Println(tools.ExampleTool)
 		return nil
 	}
+	if config {
+		fmt.Println(ExampleConfig)
+		return nil
+	}
+	if configDef {
+		fmt.Println("# config.go")
+		fmt.Println(ConfigDef)
+		fmt.Println("# tool.go")
+		fmt.Println(tools.UnifiedToolDef)
+		return nil
+	}
 	const examples = `
 # fetch trace first
 spl trace 5096cd609a7ddb8841b810d0dfa37b65 --dump tmp
 
 # ask questions about the trace
-kode chat --record tmp/chat-why-empty-instalments.json --model=claude-3-7-sonnet --system=tmp/TRACE_PROMPT.md --tool-preset=batch_read_file --tool-preset=list_dir --tool-preset=run_terminal_cmd -v --ignore-duplicate-msg "<user_query>为什么返回的instalments列表是空的?</user_query> working directory: $PWD/some_trace"
+kode chat --record tmp/chat-why-empty-instalments.json --model=claude-3-7-sonnet --system=tmp/TRACE_PROMPT.md --tool=batch_read_file --tool=list_dir --tool=run_terminal_cmd -v --ignore-duplicate-msg "<user_query>为什么返回的instalments列表是空的?</user_query> working directory: $PWD/some_trace"
 
 # Test cache (NOTE)
 kode chat --model=claude-3-7-sonnet --record tmp/cache-test/record.json -v --system='You are a Lucas

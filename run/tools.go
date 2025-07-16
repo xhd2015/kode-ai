@@ -17,8 +17,8 @@ import (
 )
 
 type ToolInfo struct {
-	Name   string
-	Preset bool
+	Name    string
+	Builtin bool
 
 	ToolDefinition *tools.UnifiedTool
 
@@ -29,17 +29,17 @@ type ToolInfo struct {
 type ToolInfoMapping map[string]*ToolInfo
 
 func listTools() error {
-	toolPresets, err := tools.GetAllPresetTools()
+	toolBuiltins, err := tools.GetAllBuiltinTools()
 	if err != nil {
 		return err
 	}
-	for _, tool := range toolPresets {
+	for _, tool := range toolBuiltins {
 		fmt.Println(tool.Name)
 	}
 	return nil
 }
 
-// executeTool checks if the tool name matches a preset and executes it
+// executeTool checks if the tool name matches a builtin and executes it
 func executeTool(ctx context.Context, toolName string, arguments string, defaultWorkingDir string, toolInfoMapping map[string]*ToolInfo) (string, bool) {
 	toolInfo, ok := toolInfoMapping[toolName]
 	if !ok {
@@ -48,10 +48,10 @@ func executeTool(ctx context.Context, toolName string, arguments string, default
 
 	var res interface{}
 	var err error
-	if toolInfo.Preset {
+	if toolInfo.Builtin {
 		executor := tools.GetExecutor(toolName)
 		if executor == nil {
-			return fmt.Sprintf("Unknown preset tool: %s", toolName), true
+			return fmt.Sprintf("Unknown builtin tool: %s", toolName), true
 		}
 
 		// Execute the tool with compile-time type safety
