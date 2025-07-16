@@ -14,26 +14,7 @@ import (
 	"github.com/xhd2015/kode-ai/internal/jsondecode"
 	"github.com/xhd2015/kode-ai/tools"
 	"github.com/xhd2015/llm-tools/jsonschema"
-	"github.com/xhd2015/llm-tools/tools/batch_read_file"
-	"github.com/xhd2015/llm-tools/tools/get_workspace_root"
-	"github.com/xhd2015/llm-tools/tools/grep_search"
-	"github.com/xhd2015/llm-tools/tools/list_dir"
-	"github.com/xhd2015/llm-tools/tools/read_file"
-	"github.com/xhd2015/llm-tools/tools/run_terminal_cmd"
-	"github.com/xhd2015/llm-tools/tools/search_replace"
-	"github.com/xhd2015/llm-tools/tools/send_answer"
 )
-
-func listTools() error {
-	toolPresets, err := tools.GetAllPresetTools()
-	if err != nil {
-		return err
-	}
-	for _, tool := range toolPresets {
-		fmt.Println(tool.Name)
-	}
-	return nil
-}
 
 type ToolInfo struct {
 	Name   string
@@ -47,23 +28,19 @@ type ToolInfo struct {
 
 type ToolInfoMapping map[string]*ToolInfo
 
-func (c *ToolInfo) String() string {
-	if c.MCPServer != "" {
-		return fmt.Sprintf("%s/%s", c.MCPServer, c.Name)
+func listTools() error {
+	toolPresets, err := tools.GetAllPresetTools()
+	if err != nil {
+		return err
 	}
-	return c.Name
-}
-
-func (c ToolInfoMapping) AddTool(toolName string, toolInfo *ToolInfo) error {
-	if prev := c[toolName]; prev != nil {
-		return fmt.Errorf("duplicate tool: %s with %s", toolInfo.String(), prev.String())
+	for _, tool := range toolPresets {
+		fmt.Println(tool.Name)
 	}
-	c[toolName] = toolInfo
 	return nil
 }
 
 // executeTool checks if the tool name matches a preset and executes it
-func executeTool(ctx context.Context, toolName string, arguments string, defaultWorkingDir string, toolPresets []string, toolInfoMapping map[string]*ToolInfo) (string, bool) {
+func executeTool(ctx context.Context, toolName string, arguments string, defaultWorkingDir string, toolInfoMapping map[string]*ToolInfo) (string, bool) {
 	toolInfo, ok := toolInfoMapping[toolName]
 	if !ok {
 		return fmt.Sprintf("Unknown tool: %s", toolName), true
@@ -72,87 +49,17 @@ func executeTool(ctx context.Context, toolName string, arguments string, default
 	var res interface{}
 	var err error
 	if toolInfo.Preset {
-		// Execute the tool based on its name
-		switch toolName {
-		case "get_workspace_root":
-			res, err = get_workspace_root.GetWorkspaceRoot(get_workspace_root.GetWorkspaceRootRequest{}, defaultWorkingDir)
-			if err != nil {
-				return fmt.Sprintf("execute %s: %v", toolName, err), true
-			}
-		case "batch_read_file":
-			req, err := batch_read_file.ParseJSONRequest(arguments)
-			if err != nil {
-				return fmt.Sprintf("parse args %s: %v", toolName, err), true
-			}
-			if req.WorkspaceRoot == "" && defaultWorkingDir != "" {
-				req.WorkspaceRoot = defaultWorkingDir
-			}
-			res, err = batch_read_file.BatchReadFile(req)
-			if err != nil {
-				return fmt.Sprintf("execute %s: %v", toolName, err), true
-			}
-		case "list_dir":
-			req, err := list_dir.ParseJSONRequest(arguments)
-			if err != nil {
-				return fmt.Sprintf("parse args %s: %v", toolName, err), true
-			}
-			if req.WorkspaceRoot == "" && defaultWorkingDir != "" {
-				req.WorkspaceRoot = defaultWorkingDir
-			}
-			res, err = list_dir.ListDir(req)
-			if err != nil {
-				return fmt.Sprintf("execute %s: %v", toolName, err), true
-			}
-		case "run_terminal_cmd":
-			req, err := run_terminal_cmd.ParseJSONRequest(arguments)
-			if err != nil {
-				return fmt.Sprintf("parse args %s: %v", toolName, err), true
-			}
-			res, err = run_terminal_cmd.RunTerminalCmd(req)
-			if err != nil {
-				return fmt.Sprintf("execute %s: %v", toolName, err), true
-			}
-		case "grep_search":
-			req, err := grep_search.ParseJSONRequest(arguments)
-			if err != nil {
-				return fmt.Sprintf("parse args %s: %v", toolName, err), true
-			}
-			res, err = grep_search.GrepSearch(req)
-			if err != nil {
-				return fmt.Sprintf("execute %s: %v", toolName, err), true
-			}
-		case "read_file":
-			req, err := read_file.ParseJSONRequest(arguments)
-			if err != nil {
-				return fmt.Sprintf("parse args %s: %v", toolName, err), true
-			}
-			if req.WorkspaceRoot == "" && defaultWorkingDir != "" {
-				req.WorkspaceRoot = defaultWorkingDir
-			}
-			res, err = read_file.ReadFile(req)
-			if err != nil {
-				return fmt.Sprintf("Error executing %s: %v", toolName, err), true
-			}
-		case "search_replace":
-			req, err := search_replace.ParseJSONRequest(arguments)
-			if err != nil {
-				return fmt.Sprintf("parse args %s: %v", toolName, err), true
-			}
-			res, err = search_replace.SearchReplace(req)
-			if err != nil {
-				return fmt.Sprintf("execute %s: %v", toolName, err), true
-			}
-		case "send_answer":
-			req, err := send_answer.ParseJSONRequest(arguments)
-			if err != nil {
-				return fmt.Sprintf("parse args %s: %v", toolName, err), true
-			}
-			res, err = send_answer.SendAnswer(req)
-			if err != nil {
-				return fmt.Sprintf("executing %s: %v", toolName, err), true
-			}
-		default:
+		executor := tools.GetExecutor(toolName)
+		if executor == nil {
 			return fmt.Sprintf("Unknown preset tool: %s", toolName), true
+		}
+
+		// Execute the tool with compile-time type safety
+		res, err = executor.Execute(arguments, tools.ExecuteOptions{
+			DefaultWorkspaceRoot: defaultWorkingDir,
+		})
+		if err != nil {
+			return fmt.Sprintf("execute %s: %v", toolName, err), true
 		}
 	} else if toolInfo.MCPClient != nil {
 		res, err = toolInfo.MCPClient.CallTool(ctx, mcp.CallToolRequest{
@@ -194,6 +101,21 @@ func executeTool(ctx context.Context, toolName string, arguments string, default
 		return fmt.Sprintf("marshalling result %s: %v", toolName, err), true
 	}
 	return string(jsonRes), true
+}
+
+func (c *ToolInfo) String() string {
+	if c.MCPServer != "" {
+		return fmt.Sprintf("%s/%s", c.MCPServer, c.Name)
+	}
+	return c.Name
+}
+
+func (c ToolInfoMapping) AddTool(toolName string, toolInfo *ToolInfo) error {
+	if prev := c[toolName]; prev != nil {
+		return fmt.Errorf("duplicate tool: %s with %s", toolInfo.String(), prev.String())
+	}
+	c[toolName] = toolInfo
+	return nil
 }
 
 func interplotList(list []string, args map[string]any) ([]string, error) {

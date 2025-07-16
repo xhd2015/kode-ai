@@ -399,7 +399,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		var newToolUseNum int
 		switch c.Provider {
 		case providers.ProviderOpenAI:
-			res, err := c.processOpenAIResponse(ctx, resultOpenAI, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets, toolInfoMapping)
+			res, err := c.processOpenAIResponse(ctx, resultOpenAI, hasMaxRound, model, recordFile, absDefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return err
 			}
@@ -412,7 +412,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 
 			newToolUseNum = res.ToolUseNum
 		case providers.ProviderAnthropic:
-			res, err := c.processAnthropicResponse(ctx, resultAnthropic, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets, toolInfoMapping)
+			res, err := c.processAnthropicResponse(ctx, resultAnthropic, hasMaxRound, model, recordFile, absDefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return err
 			}
@@ -433,7 +433,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			}
 			newToolUseNum = res.ToolUseNum
 		case providers.ProviderGemini:
-			res, err := c.processGeminiResponse(ctx, resultGemini, toolUseNum, hasMaxRound, model, recordFile, absDefaultToolCwd, opts.toolPresets, toolInfoMapping)
+			res, err := c.processGeminiResponse(ctx, resultGemini, toolUseNum, hasMaxRound, model, recordFile, absDefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return err
 			}
@@ -794,7 +794,7 @@ type ResponseResultOpenAI struct {
 	TokenUsage  TokenUsage
 }
 
-func (c *ChatHandler) processOpenAIResponse(ctx context.Context, resultOpenAI *openai.ChatCompletion, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultOpenAI, error) {
+func (c *ChatHandler) processOpenAIResponse(ctx context.Context, resultOpenAI *openai.ChatCompletion, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultOpenAI, error) {
 	if len(resultOpenAI.Choices) == 0 {
 		return nil, fmt.Errorf("response no choices")
 	}
@@ -860,7 +860,7 @@ func (c *ChatHandler) processOpenAIResponse(ctx context.Context, resultOpenAI *o
 		}
 
 		// Check if tool name matches a preset and execute it
-		result, ok := executeTool(ctx, toolCall.Function.Name, toolCall.Function.Arguments, defaultToolCwd, toolPresets, mcpInfoMapping)
+		result, ok := executeTool(ctx, toolCall.Function.Name, toolCall.Function.Arguments, defaultToolCwd, mcpInfoMapping)
 		if ok {
 			toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
 			fmt.Println(toolResultStr)
@@ -927,7 +927,7 @@ type ResponseResultAnthropic struct {
 	TokenUsage  TokenUsage
 }
 
-func (c *ChatHandler) processAnthropicResponse(ctx context.Context, resultAnthropic *anthropic.Message, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultAnthropic, error) {
+func (c *ChatHandler) processAnthropicResponse(ctx context.Context, resultAnthropic *anthropic.Message, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultAnthropic, error) {
 	var toolUseNum int
 	var respContents []anthropic.ContentBlockParamUnion
 	var toolResults []anthropic.ContentBlockParamUnion
@@ -987,7 +987,7 @@ func (c *ChatHandler) processAnthropicResponse(ctx context.Context, resultAnthro
 
 			// Check if tool name matches a preset and execute it
 
-			result, ok := executeTool(ctx, toolUse.Name, string(toolUse.Input), defaultToolCwd, toolPresets, mcpInfoMapping)
+			result, ok := executeTool(ctx, toolUse.Name, string(toolUse.Input), defaultToolCwd, mcpInfoMapping)
 			if ok {
 				toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
 				fmt.Println(toolResultStr)
@@ -1054,7 +1054,7 @@ type ResponseResultGemini struct {
 	TokenUsage  TokenUsage
 }
 
-func (c *ChatHandler) processGeminiResponse(ctx context.Context, resultGemini *genai.GenerateContentResponse, toolUsedNum int, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, toolPresets []string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultGemini, error) {
+func (c *ChatHandler) processGeminiResponse(ctx context.Context, resultGemini *genai.GenerateContentResponse, toolUsedNum int, hasMaxRound bool, model string, recordFile string, defaultToolCwd string, mcpInfoMapping map[string]*ToolInfo) (*ResponseResultGemini, error) {
 	var toolUseNum int
 	var respContents []*genai.Content
 	var toolResults []*genai.Content
@@ -1112,7 +1112,7 @@ func (c *ChatHandler) processGeminiResponse(ctx context.Context, resultGemini *g
 				}
 			}
 
-			result, ok := executeTool(ctx, toolUse.Name, argsJSONStr, defaultToolCwd, toolPresets, mcpInfoMapping)
+			result, ok := executeTool(ctx, toolUse.Name, argsJSONStr, defaultToolCwd, mcpInfoMapping)
 			if ok {
 				toolResultStr := fmt.Sprintf("<tool_result>%s</tool_result>", limitPrintLength(result))
 				fmt.Println(toolResultStr)
