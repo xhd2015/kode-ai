@@ -120,7 +120,7 @@ func showUsageFromMessages(messages Messages) error {
 		}
 
 		total.Usage = total.Usage.Add(*msg.TokenUsage)
-		provider, err := providers.GetModelProvider(msg.Model)
+		provider, err := providers.GetModelAPIShape(msg.Model)
 		if err != nil {
 			return err
 		}
@@ -181,14 +181,14 @@ func addDecimals(nums ...string) string {
 
 var _1M = decimal.NewFromInt(1e6)
 
-func computeCost(provider providers.Provider, model string, usage TokenUsage) (TokenCost, bool) {
+func computeCost(apiShape providers.APIShape, model string, usage TokenUsage) (TokenCost, bool) {
 	costDef, ok := providers.GetModelCost(model)
 	if !ok {
 		return TokenCost{}, false
 	}
 	var inputUSD decimal.Decimal
 	var inputBreakdown TokenCostInputBreakdown
-	if provider == providers.ProviderAnthropic {
+	if apiShape == providers.APIShapeAnthropic {
 		inputCacheWriteUSD := requireFromString(costDef.InputCacheWriteUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheWrite)).Div(_1M)
 		inputNonCacheReadUSD := requireFromString(costDef.InputUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.NonCacheRead)).Div(_1M)
 		inputCacheReadUSD := requireFromString(costDef.InputCacheReadUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheRead)).Div(_1M)

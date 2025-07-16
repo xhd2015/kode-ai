@@ -21,6 +21,11 @@ const (
 	ModelGemini2_5_Flash      = "gemini-2.5-flash"
 	ModelGemini2_5_Flash_0520 = "gemini-2.5-flash-preview-05-20"
 
+	// kimi
+	ModelKimiK2              = "kimi-k2"
+	ModelKimiK2_0711_Preview = "kimi-k2-0711-preview"
+	ModelOpenRouterKimiK2    = "moonshotai/kimi-k2"
+
 	ModelDeepSeekR1          = "DeepSeek-R1"
 	ModelQwen25VL72BInstruct = "Qwen2.5-VL-72B-Instruct"
 )
@@ -46,6 +51,9 @@ var AllModels = []string{
 	ModelGemini2_5_Flash,
 	ModelGemini2_5_Flash_0520,
 
+	ModelKimiK2,
+	ModelKimiK2_0711_Preview,
+
 	ModelDeepSeekR1,
 	ModelQwen25VL72BInstruct,
 }
@@ -56,6 +64,7 @@ var modelAlias = map[string]string{
 	ModelGemini2_0_Flash: ModelGemini2_0_Flash_001,
 	ModelGemini2_5_Pro:   ModelGemini2_5_Pro_0605,
 	ModelGemini2_5_Flash: ModelGemini2_5_Flash_0520,
+	ModelKimiK2:          ModelKimiK2_0711_Preview,
 }
 
 func GetUnderlyingModel(model string) string {
@@ -152,12 +161,29 @@ var modelCostMapping = map[string]ModelCost{
 	ModelGemini2_5_Pro_0605:   gemini2_5_ProCost_Under200KInput,
 	ModelGemini2_5_Flash:      gemini2_5_FlashCost,
 	ModelGemini2_5_Flash_0520: gemini2_5_FlashCost,
+
+	// see https://platform.moonshot.cn/docs/pricing/chat
+	ModelKimiK2_0711_Preview: ModelCost{
+		InputUSDPer1M:          "0.56", // 4RMB
+		InputCacheReadUSDPer1M: "0.14", // 1RMB
+		OutputUSDPer1M:         "2.23", // 16RMB
+	},
+	ModelOpenRouterKimiK2: ModelCost{
+		InputUSDPer1M:          "0.56", // 4RMB
+		InputCacheReadUSDPer1M: "0.14", // 1RMB
+		OutputUSDPer1M:         "2.23", // 16RMB
+	},
 }
 
 func GetModelCost(model string) (ModelCost, bool) {
 	modelCost, ok := modelCostMapping[model]
-	if !ok {
+	if ok {
+		return modelCost, true
+	}
+	underlyingModel := GetUnderlyingModel(model)
+	if underlyingModel != "" {
 		return ModelCost{}, false
 	}
-	return modelCost, true
+	underlyingModelCost, ok := modelCostMapping[underlyingModel]
+	return underlyingModelCost, ok
 }

@@ -50,7 +50,7 @@ type ChatOptions struct {
 }
 
 type ChatHandler struct {
-	Provider providers.Provider
+	APIShape providers.APIShape
 
 	// openAIKeepMultipleSystemPrompts_DO_NOT_SET only for testing purpose
 	// please do not set it.
@@ -186,24 +186,24 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 	var toolsOpenAI []openai.ChatCompletionToolParam
 	var toolsAnthropic []anthropic.ToolUnionParam
 	var toolsGemini []*genai.Tool
-	switch c.Provider {
-	case providers.ProviderOpenAI:
+	switch c.APIShape {
+	case providers.APIShapeOpenAI:
 		toolsOpenAI, err = toolSchemas.ToOpenAI()
 		if err != nil {
 			return err
 		}
-	case providers.ProviderAnthropic:
+	case providers.APIShapeAnthropic:
 		toolsAnthropic, err = toolSchemas.ToAnthropic()
 		if err != nil {
 			return err
 		}
-	case providers.ProviderGemini:
+	case providers.APIShapeGemini:
 		toolsGemini, err = toolSchemas.ToGemini()
 		if err != nil {
 			return err
 		}
 	default:
-		return fmt.Errorf("unsupported provider: %s", c.Provider)
+		return fmt.Errorf("unsupported provider: %s", c.APIShape)
 	}
 
 	var systemMessageOpenAI *openai.ChatCompletionMessageParamUnion
@@ -218,8 +218,8 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		}
 		userSystemPrompt = content
 
-		switch c.Provider {
-		case providers.ProviderOpenAI:
+		switch c.APIShape {
+		case providers.APIShapeOpenAI:
 			systemMessageOpenAI = &openai.ChatCompletionMessageParamUnion{
 				OfSystem: &openai.ChatCompletionSystemMessageParam{
 					Content: openai.ChatCompletionSystemMessageParamContentUnion{
@@ -227,12 +227,12 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 					},
 				},
 			}
-		case providers.ProviderAnthropic:
+		case providers.APIShapeAnthropic:
 			systemMsg := anthropic.TextBlockParam{
 				Text: content,
 			}
 			systemAnthropic = append(systemAnthropic, systemMsg)
-		case providers.ProviderGemini:
+		case providers.APIShapeGemini:
 			systemMessageGemini = &genai.Content{
 				Parts: []*genai.Part{
 					{
@@ -241,11 +241,11 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				},
 			}
 		default:
-			return fmt.Errorf("unsupported provider: %s", c.Provider)
+			return fmt.Errorf("unsupported provider: %s", c.APIShape)
 		}
 	} else if len(historicalSystemPrompts) > 0 {
-		switch c.Provider {
-		case providers.ProviderOpenAI:
+		switch c.APIShape {
+		case providers.APIShapeOpenAI:
 			// do nothing
 			if !openAIKeepMultipleSystemPrompts {
 				lastSystemPrompt := historicalSystemPrompts[len(historicalSystemPrompts)-1]
@@ -257,7 +257,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 					},
 				}
 			}
-		case providers.ProviderAnthropic:
+		case providers.APIShapeAnthropic:
 			// If user doesn't provide a system prompt, use the last system prompt in historical messages
 			lastSystemPrompt := historicalSystemPrompts[len(historicalSystemPrompts)-1]
 
@@ -265,7 +265,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				Text: lastSystemPrompt,
 			}
 			systemAnthropic = append(systemAnthropic, systemMsg)
-		case providers.ProviderGemini:
+		case providers.APIShapeGemini:
 			lastSystemPrompt := historicalSystemPrompts[len(historicalSystemPrompts)-1]
 			systemMessageGemini = &genai.Content{
 				Parts: []*genai.Part{
@@ -275,7 +275,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				},
 			}
 		default:
-			return fmt.Errorf("system prompt: unsupported provider: %s", c.Provider)
+			return fmt.Errorf("system prompt: unsupported provider: %s", c.APIShape)
 		}
 	}
 
@@ -314,7 +314,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		fmt.Printf("Prompt cache %s with %s\n", cacheLog, model)
 	}
 
-	if needCache && c.Provider == providers.ProviderAnthropic {
+	if needCache && c.APIShape == providers.APIShapeAnthropic {
 		systemAnthropic = anthropic_helper.MarkTextBlocksEphemeralCache(systemAnthropic)
 		toolsAnthropic = anthropic_helper.MarkToolsEphemeralCache(toolsAnthropic)
 	}
@@ -338,8 +338,8 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			fmt.Println("Request...")
 		}
 
-		switch c.Provider {
-		case providers.ProviderOpenAI:
+		switch c.APIShape {
+		case providers.APIShapeOpenAI:
 			resultOpenAI, err = clientOpenAI.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 				Model:    model,
 				Messages: messagesOpenAI,
@@ -349,7 +349,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			if err != nil {
 				return err
 			}
-		case providers.ProviderAnthropic:
+		case providers.APIShapeAnthropic:
 			sendMessage := messagesAnthropic
 			if needCache {
 				sendMessage = anthropic_helper.MarkMsgsEphemeralCache(messagesAnthropic)
@@ -364,7 +364,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			if err != nil {
 				return err
 			}
-		case providers.ProviderGemini:
+		case providers.APIShapeGemini:
 			resultGemini, err = clientGemini.Models.GenerateContent(ctx, model, messagesGemini, &genai.GenerateContentConfig{
 				HTTPOptions: &genai.HTTPOptions{
 					APIVersion: "v1",
@@ -380,7 +380,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				return err
 			}
 		default:
-			return fmt.Errorf("call api: unsupported provider: %s", c.Provider)
+			return fmt.Errorf("call api: unsupported provider: %s", c.APIShape)
 		}
 
 		if logChat {
@@ -397,8 +397,8 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		var tokenUsage TokenUsage
 
 		var newToolUseNum int
-		switch c.Provider {
-		case providers.ProviderOpenAI:
+		switch c.APIShape {
+		case providers.APIShapeOpenAI:
 			res, err := c.processOpenAIResponse(ctx, resultOpenAI, hasMaxRound, model, recordFile, absDefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return err
@@ -411,7 +411,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			messagesOpenAI = append(messagesOpenAI, toolResults...)
 
 			newToolUseNum = res.ToolUseNum
-		case providers.ProviderAnthropic:
+		case providers.APIShapeAnthropic:
 			res, err := c.processAnthropicResponse(ctx, resultAnthropic, hasMaxRound, model, recordFile, absDefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return err
@@ -432,7 +432,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				})
 			}
 			newToolUseNum = res.ToolUseNum
-		case providers.ProviderGemini:
+		case providers.APIShapeGemini:
 			res, err := c.processGeminiResponse(ctx, resultGemini, toolUseNum, hasMaxRound, model, recordFile, absDefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return err
@@ -448,7 +448,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 			}
 			newToolUseNum = res.ToolUseNum
 		default:
-			return fmt.Errorf("unsupported provider: %s", c.Provider)
+			return fmt.Errorf("unsupported provider: %s", c.APIShape)
 		}
 
 		totalTokenUsage = totalTokenUsage.Add(tokenUsage)
@@ -474,7 +474,7 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 				return fmt.Errorf("record stop reason message: %v", err)
 			}
 		}
-		cost, costOK := computeCost(c.Provider, model, tokenUsage)
+		cost, costOK := computeCost(c.APIShape, model, tokenUsage)
 		var costUSD string
 		if costOK {
 			costUSD = "$" + cost.TotalUSD
@@ -524,24 +524,24 @@ func (c *ChatHandler) readHistoryMessages(recordFile string, openAIKeepMultipleS
 			return nil, fmt.Errorf("failed to load historical messages: %v", err)
 		}
 
-		switch c.Provider {
-		case providers.ProviderOpenAI:
+		switch c.APIShape {
+		case providers.APIShapeOpenAI:
 			historicalMessagesOpenAI, historicalSystemPrompts, err = msgHistory.ToOpenAI(openAIKeepMultipleSystemPrompts)
 			if err != nil {
 				return nil, fmt.Errorf("convert anthropic messages: %w", err)
 			}
-		case providers.ProviderAnthropic:
+		case providers.APIShapeAnthropic:
 			historicalMessagesAnthropic, historicalSystemPrompts, err = msgHistory.ToAnthropic()
 			if err != nil {
 				return nil, fmt.Errorf("convert anthropic messages: %w", err)
 			}
-		case providers.ProviderGemini:
+		case providers.APIShapeGemini:
 			historicalMessagesGemini, historicalSystemPrompts, err = msgHistory.ToGemini()
 			if err != nil {
 				return nil, fmt.Errorf("convert gemini messages: %w", err)
 			}
 		default:
-			return nil, fmt.Errorf("read recording: unsupported provider: %s", c.Provider)
+			return nil, fmt.Errorf("read recording: unsupported provider: %s", c.APIShape)
 		}
 
 	}
@@ -604,8 +604,8 @@ func (c *ChatHandler) createClient(ctx context.Context, baseURL string, token st
 	var clientOpenAI *openai.Client
 	var clientAnthropic *anthropic.Client
 	var clientGemini *genai.Client
-	switch c.Provider {
-	case providers.ProviderOpenAI:
+	switch c.APIShape {
+	case providers.APIShapeOpenAI:
 		var clientOptions []openai_opt.RequestOption
 		if baseURL != "" {
 			clientOptions = append(clientOptions, openai_opt.WithBaseURL(baseURL))
@@ -619,7 +619,7 @@ func (c *ChatHandler) createClient(ctx context.Context, baseURL string, token st
 			clientOptions...,
 		)
 		clientOpenAI = &client
-	case providers.ProviderAnthropic:
+	case providers.APIShapeAnthropic:
 		var clientOpts []anth_opt.RequestOption
 		if baseURL != "" {
 			clientOpts = append(clientOpts, anth_opt.WithBaseURL(baseURL))
@@ -632,7 +632,7 @@ func (c *ChatHandler) createClient(ctx context.Context, baseURL string, token st
 		clientAnthropic = anthropic_helper.NewClient(
 			clientOpts...,
 		)
-	case providers.ProviderGemini:
+	case providers.APIShapeGemini:
 		var err error
 		// see https://ai.google.dev/gemini-api/docs#rest
 		clientGemini, err = genai.NewClient(ctx, &genai.ClientConfig{
@@ -646,7 +646,7 @@ func (c *ChatHandler) createClient(ctx context.Context, baseURL string, token st
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("unsupported provider: %s", c.Provider)
+		return nil, fmt.Errorf("unsupported provider: %s", c.APIShape)
 	}
 	return &ClientUnion{
 		OpenAI:    clientOpenAI,
@@ -675,8 +675,8 @@ func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts 
 	var messagesOpenAI []openai.ChatCompletionMessageParamUnion
 	var messagesAnthropic []anthropic.MessageParam
 	var messagesGemini []*genai.Content
-	switch c.Provider {
-	case providers.ProviderOpenAI:
+	switch c.APIShape {
+	case providers.APIShapeOpenAI:
 		if openAIKeepMultipleSystemPrompts {
 			messagesOpenAI = append(messagesOpenAI, historicalMessagesOpenAI...)
 			if systemMessageOpenAI != nil {
@@ -705,7 +705,7 @@ func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts 
 		if len(messagesOpenAI) == 0 {
 			return nil, fmt.Errorf("requires msg")
 		}
-	case providers.ProviderAnthropic:
+	case providers.APIShapeAnthropic:
 		messagesAnthropic = append(messagesAnthropic, historicalMessagesAnthropic...)
 		// Add current user message
 		if len(historicalMessagesAnthropic) == 0 {
@@ -723,7 +723,7 @@ func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts 
 		if len(messagesAnthropic) == 0 {
 			return nil, fmt.Errorf("requires msg")
 		}
-	case providers.ProviderGemini:
+	case providers.APIShapeGemini:
 		messagesGemini = append(messagesGemini, historicalMessagesGemini...)
 		if len(historicalMessagesGemini) == 0 {
 			if msg == "" {
@@ -746,7 +746,7 @@ func (c *ChatHandler) buildMessages(msg string, openAIKeepMultipleSystemPrompts 
 			return nil, fmt.Errorf("requires msg")
 		}
 	default:
-		return nil, fmt.Errorf("msg: unsupported provider: %s", c.Provider)
+		return nil, fmt.Errorf("msg: unsupported provider: %s", c.APIShape)
 	}
 	return &MessagesUnion{
 		OpenAI:    messagesOpenAI,
@@ -1202,8 +1202,8 @@ func (c *ChatHandler) processGeminiResponse(ctx context.Context, resultGemini *g
 }
 
 func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, resultOpenAI *openai.ChatCompletion, resultAnthropic *anthropic.Message, resultGemini *genai.GenerateContentResponse) (bool, *Message, error) {
-	switch c.Provider {
-	case providers.ProviderOpenAI:
+	switch c.APIShape {
+	case providers.APIShapeOpenAI:
 		if len(resultOpenAI.Choices) == 0 {
 			return false, nil, fmt.Errorf("response no choices")
 		}
@@ -1220,7 +1220,7 @@ func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, res
 				}, nil
 			}
 		}
-	case providers.ProviderAnthropic:
+	case providers.APIShapeAnthropic:
 		if resultAnthropic.StopReason != "" {
 			return resultAnthropic.StopReason == "end_turn", &Message{
 				Type:  MsgType_StopReason,
@@ -1232,7 +1232,7 @@ func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, res
 				}),
 			}, nil
 		}
-	case providers.ProviderGemini:
+	case providers.APIShapeGemini:
 		if len(resultGemini.Candidates) == 0 {
 			return false, nil, fmt.Errorf("response no candidates")
 		}
@@ -1250,7 +1250,7 @@ func (c *ChatHandler) checkRecordStopReason(recordFile string, model string, res
 			}),
 		}, nil
 	default:
-		return false, nil, fmt.Errorf("stop reason: unsupported provider: %s", c.Provider)
+		return false, nil, fmt.Errorf("stop reason: unsupported provider: %s", c.APIShape)
 	}
 	return false, nil, nil
 }

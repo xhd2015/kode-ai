@@ -149,7 +149,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	}
 
 	var token string
-	var baseUrl string = defaultBaseURL
+	var baseUrl string
 	var systemPrompt string
 	var model string
 
@@ -237,18 +237,22 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	}
 
 	model = providers.GetUnderlyingModel(model)
+	apiShape, err := providers.GetModelAPIShape(model)
+	if err != nil {
+		return err
+	}
 	provider, err := providers.GetModelProvider(model)
 	if err != nil {
 		return err
 	}
 
-	resolvedOpts, err := ResolveProviderDefaultEnvOptions(provider, toolDefaultCwd, token, baseUrl)
+	resolvedOpts, err := ResolveProviderDefaultEnvOptions(apiShape, provider, toolDefaultCwd, token, baseUrl, defaultBaseURL)
 	if err != nil {
 		return err
 	}
 
 	c := ChatHandler{
-		Provider: provider,
+		APIShape: apiShape,
 	}
 	return c.Handle(model, resolvedOpts.BaseUrl, resolvedOpts.Token, msg, ChatOptions{
 		maxRound: maxRound,
@@ -277,7 +281,7 @@ type ResolvedOptions struct {
 	BaseUrl           string
 }
 
-func ResolveProviderDefaultEnvOptions(provider providers.Provider, defaultToolCwd string, token string, baseUrl string) (ResolvedOptions, error) {
+func ResolveProviderDefaultEnvOptions(apiShape providers.APIShape, provider providers.Provider, defaultToolCwd string, token string, baseUrl string, defaultBaseUrl string) (ResolvedOptions, error) {
 	var tokenEnvKey string
 	var baseUrlEnvKey string
 	switch provider {
@@ -290,18 +294,24 @@ func ResolveProviderDefaultEnvOptions(provider providers.Provider, defaultToolCw
 	case providers.ProviderGemini:
 		tokenEnvKey = "GEMINI_API_KEY"
 		baseUrlEnvKey = "GEMINI_BASE_URL"
+	case providers.ProviderMoonshot:
+		tokenEnvKey = "MOONSHOT_API_KEY"
+		baseUrlEnvKey = "MOONSHOT_BASE_URL"
+	case providers.ProviderOpenRouter:
+		tokenEnvKey = "OPENROUTER_API_KEY"
+		baseUrlEnvKey = "OPENROUTER_BASE_URL"
 	default:
-		return ResolvedOptions{}, fmt.Errorf("unsupported provider: %s", provider)
+		return ResolvedOptions{}, fmt.Errorf("resolve provider env, unsupported provider: %s", apiShape)
 	}
 
-	resolvedOpts, err := ResolveEnvOptions(defaultToolCwd, token, tokenEnvKey, baseUrl, baseUrlEnvKey, "KODE_DEFAULT_BASE_URL")
+	resolvedOpts, err := ResolveEnvOptions(defaultToolCwd, token, tokenEnvKey, baseUrl, baseUrlEnvKey, "KODE_DEFAULT_BASE_URL", defaultBaseUrl)
 	if err != nil {
 		return ResolvedOptions{}, err
 	}
 	return resolvedOpts, nil
 }
 
-func ResolveEnvOptions(defaultToolCwd string, token string, tokenEnvKey string, baseUrl string, baseUrlEnvKey string, defaultBaseUrlEnvKey string) (ResolvedOptions, error) {
+func ResolveEnvOptions(defaultToolCwd string, token string, tokenEnvKey string, baseUrl string, baseUrlEnvKey string, defaultBaseUrlEnvKey string, defaultBaseUrl string) (ResolvedOptions, error) {
 	var absDefaultToolCwd string
 	if defaultToolCwd != "" {
 		var err error
@@ -328,6 +338,9 @@ func ResolveEnvOptions(defaultToolCwd string, token string, tokenEnvKey string, 
 		}
 		if envBaseURL == "" && defaultBaseUrlEnvKey != "" {
 			envBaseURL = os.Getenv(defaultBaseUrlEnvKey)
+		}
+		if envBaseURL == "" {
+			envBaseURL = defaultBaseUrl
 		}
 		baseUrl = envBaseURL
 	}
@@ -445,7 +458,7 @@ func handleView(args []string) error {
 				limitedContent := limitPrintLength(m.Content)
 				fmt.Printf("%s: <tool_result tool=%q>%s</tool_result>\n", m.Role, m.ToolName, limitedContent)
 			case MsgType_TokenUsage:
-				provider, err := providers.GetModelProvider(m.Model)
+				provider, err := providers.GetModelAPIShape(m.Model)
 				if err != nil {
 					fmt.Printf("%s: token cost: %v\n", m.Role, err)
 					continue
