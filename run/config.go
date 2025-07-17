@@ -17,10 +17,21 @@ var ExampleConfig string
 //go:embed config_def.go
 var ConfigDef string
 
+type FullConfig struct {
+	Config
+	RecordFile         string `json:"record_file,omitempty"`
+	NoCache            bool   `json:"no_cache,omitempty"`
+	ShowUsage          bool   `json:"show_usage,omitempty"`
+	IgnoreDuplicateMsg bool   `json:"ignore_duplicate_msg,omitempty"`
+	LogRequest         bool   `json:"log_request,omitempty"`
+	LogChat            *bool  `json:"log_chat,omitempty"`
+	Verbose            bool   `json:"verbose,omitempty"`
+}
+
 // LoadConfig loads configuration from a JSON file
-func LoadConfig(configFile string) (*Config, error) {
+func LoadConfig(configFile string) (*FullConfig, error) {
 	if configFile == "" {
-		return &Config{}, nil
+		return &FullConfig{}, nil
 	}
 
 	// Handle relative paths
@@ -38,7 +49,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		return nil, fmt.Errorf("read config file %s: %v", configFile, err)
 	}
 
-	var config Config
+	var config FullConfig
 	if err := json.Unmarshal([]byte(content), &config); err != nil {
 		return nil, fmt.Errorf("parse config file %s: %v", configFile, err)
 	}
@@ -47,7 +58,7 @@ func LoadConfig(configFile string) (*Config, error) {
 }
 
 // ApplyConfig applies configuration values to the provided variables, giving precedence to command line arguments
-func ApplyConfig(config *Config, token *string, maxRound *int, baseUrl *string, model *string, systemPrompt *string, tools *[]string, toolCustomFiles *[]string, toolCustomJSONs *[]string, toolDefaultCwd *string, recordFile *string, noCache *bool, showUsage *bool, ignoreDuplicateMsg *bool, logRequest *bool, logChat *bool, verbose *bool, mcpServers *[]string) error {
+func ApplyConfig(config *FullConfig, token *string, maxRound *int, baseUrl *string, model *string, systemPrompt *string, tools *[]string, toolCustomFiles *[]string, toolCustomJSONs *[]string, toolDefaultCwd *string, recordFile *string, noCache *bool, showUsage *bool, ignoreDuplicateMsg *bool, logRequest *bool, logChatFlag **bool, verbose *bool, mcpServers *[]string) error {
 	if config == nil {
 		return nil
 	}
@@ -104,8 +115,8 @@ func ApplyConfig(config *Config, token *string, maxRound *int, baseUrl *string, 
 	if !*logRequest && config.LogRequest {
 		*logRequest = config.LogRequest
 	}
-	if *logChat && !config.LogChat {
-		*logChat = config.LogChat
+	if *logChatFlag == nil && config.LogChat != nil {
+		*logChatFlag = config.LogChat
 	}
 	if !*verbose && config.Verbose {
 		*verbose = config.Verbose

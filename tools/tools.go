@@ -181,6 +181,9 @@ func JsonschemaToMap(schema *jsonschema.JsonSchema) map[string]any {
 	if len(schema.Required) > 0 {
 		paramsMap["required"] = schema.Required
 	}
+	if schema.Default != nil {
+		paramsMap["default"] = schema.Default
+	}
 	return paramsMap
 }
 
@@ -217,6 +220,7 @@ func toGeminiSchema(jschema *jsonschema.JsonSchema) *genai.Schema {
 		Properties:  toGeminiSchemaMap(jschema.Properties),
 		Items:       toGeminiSchema(jschema.Items),
 		Required:    jschema.Required,
+		Default:     jschema.Default,
 	}
 }
 func toGeminiSchemaMap(jschema map[string]*jsonschema.JsonSchema) map[string]*genai.Schema {

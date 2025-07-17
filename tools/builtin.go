@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/xhd2015/llm-tools/tools/batch_read_file"
+	"github.com/xhd2015/llm-tools/tools/create_file_with_content"
 	"github.com/xhd2015/llm-tools/tools/defs"
 	"github.com/xhd2015/llm-tools/tools/delete_file"
 	"github.com/xhd2015/llm-tools/tools/file_search"
@@ -17,7 +18,7 @@ import (
 	"github.com/xhd2015/llm-tools/tools/search_replace"
 	"github.com/xhd2015/llm-tools/tools/send_answer"
 	"github.com/xhd2015/llm-tools/tools/todo_write"
-	"github.com/xhd2015/llm-tools/tools/write_file"
+	"github.com/xhd2015/llm-tools/tools/tree"
 
 	// "github.com/xhd2015/llm-tools/tools/tree"
 	"github.com/xhd2015/llm-tools/tools/web_search"
@@ -46,20 +47,20 @@ var tools = []*ExecutorInfo{
 		Definition: list_dir.GetToolDefinition(),
 		Executor:   ListDirExecutor{},
 	},
-	// {
-	// 	Name:       "tree",
-	// 	Definition: tree.GetToolDefinition(),
-	// 	Executor:   TreeExecutor{},
-	// },
+	{
+		Name:       "tree",
+		Definition: tree.GetToolDefinition(),
+		Executor:   TreeExecutor{},
+	},
 	{
 		Name:       "grep_search",
 		Definition: grep_search.GetToolDefinition(),
 		Executor:   GrepSearchExecutor{},
 	},
 	{
-		Name:       "write_file",
-		Definition: write_file.GetToolDefinition(),
-		Executor:   WriteFileExecutor{},
+		Name:       "create_file_with_content",
+		Definition: create_file_with_content.GetToolDefinition(),
+		Executor:   CreateFileWithContentExecutor{},
 	},
 	{
 		Name:       "read_file",
@@ -216,6 +217,20 @@ func (e RunTerminalCmdExecutor) Execute(arguments string, opts ExecuteOptions) (
 	return run_terminal_cmd.RunTerminalCmd(req)
 }
 
+type TreeExecutor struct {
+}
+
+func (e TreeExecutor) Execute(arguments string, opts ExecuteOptions) (interface{}, error) {
+	req, err := tree.ParseJSONRequest(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("parse args: %v", err)
+	}
+	if req.WorkspaceRoot == "" && opts.DefaultWorkspaceRoot != "" {
+		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
+	}
+	return tree.ExecuteTree(req)
+}
+
 type GrepSearchExecutor struct {
 }
 
@@ -230,18 +245,18 @@ func (e GrepSearchExecutor) Execute(arguments string, opts ExecuteOptions) (inte
 	return grep_search.GrepSearch(req)
 }
 
-type WriteFileExecutor struct {
+type CreateFileWithContentExecutor struct {
 }
 
-func (e WriteFileExecutor) Execute(arguments string, opts ExecuteOptions) (interface{}, error) {
-	req, err := write_file.ParseJSONRequest(arguments)
+func (e CreateFileWithContentExecutor) Execute(arguments string, opts ExecuteOptions) (interface{}, error) {
+	req, err := create_file_with_content.ParseJSONRequest(arguments)
 	if err != nil {
 		return nil, fmt.Errorf("parse args: %v", err)
 	}
 	if req.WorkspaceRoot == "" && opts.DefaultWorkspaceRoot != "" {
 		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
 	}
-	return write_file.WriteFile(req)
+	return create_file_with_content.CreateFileWithContent(req)
 }
 
 type ReadFileExecutor struct {

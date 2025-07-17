@@ -5,7 +5,9 @@
         "list_dir",
         "read_file"
     ],
-    "system": [],
+    "system": [
+        "You are a helpful assistant that can answer questions and help with tasks."
+    ],
     "tool_custom_jsons": [
         {
             "name": "example_tool",
@@ -32,8 +34,7 @@
             ]
         }
     ],
-    "verbose": true,
-    "log_chat": true,
-    "ignore_duplicate_msg": true,
-    "record_file": "test_chat.json"
+    "examples": [
+        "What is the weather in Tokyo?"
+    ]
 }

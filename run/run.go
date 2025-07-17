@@ -168,7 +168,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var noCache bool
 
 	var logRequest bool
-	var logChat bool = true
+	var logChatFlag *bool
 	var verbose bool
 	var mcpServers []string
 	var configFile string
@@ -187,7 +187,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		Bool("--show-usage", &showUsage).
 		Bool("--ignore-duplicate-msg", &ignoreDuplicateMsg).
 		Bool("--log-request", &logRequest).
-		Bool("--log-chat", &logChat).
+		Bool("--log-chat", &logChatFlag).
 		Bool("-v,--verbose", &verbose).
 		StringSlice("--mcp", &mcpServers).
 		String("-c,--config", &configFile).
@@ -212,7 +212,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		return err
 	}
 
-	err = ApplyConfig(config, &token, &maxRound, &baseUrl, &model, &systemPrompt, &tools, &toolCustomFiles, &toolCustomJSONs, &toolDefaultCwd, &recordFile, &noCache, &showUsage, &ignoreDuplicateMsg, &logRequest, &logChat, &verbose, &mcpServers)
+	err = ApplyConfig(config, &token, &maxRound, &baseUrl, &model, &systemPrompt, &tools, &toolCustomFiles, &toolCustomJSONs, &toolDefaultCwd, &recordFile, &noCache, &showUsage, &ignoreDuplicateMsg, &logRequest, &logChatFlag, &verbose, &mcpServers)
 	if err != nil {
 		return err
 	}
@@ -276,6 +276,11 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	resolvedOpts, err := ResolveProviderDefaultEnvOptions(apiShape, provider, toolDefaultCwd, token, baseUrl, defaultBaseURL)
 	if err != nil {
 		return err
+	}
+
+	var logChat bool = true
+	if logChatFlag != nil {
+		logChat = *logChatFlag
 	}
 
 	c := ChatHandler{
