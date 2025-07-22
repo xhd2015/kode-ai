@@ -574,7 +574,7 @@ func (c *ChatHandler) checkUserMsgDuplicate(msg string, history Messages, ignore
 				return "", true, fmt.Errorf("duplicate user msg, either clear the msg or run with --ignore-duplicate-msg")
 			}
 			// prompt user: duplicate msg, continune?
-			prompt := fmt.Sprintf("Duplicate input with last msg created at %s, proceed?\n  c:proceed with duplicate, x:proceed without duplicate, q:quit", lastUserMsg.Time)
+			prompt := fmt.Sprintf("Duplicate input with last msg created at %s, proceed?\n  c:proceed with duplicate, x:proceed without duplicate, q:quit, a:ask with a different question", lastUserMsg.Time)
 			for {
 				reader := bufio.NewReader(os.Stdin)
 				fmt.Println(prompt)
@@ -584,6 +584,13 @@ func (c *ChatHandler) checkUserMsgDuplicate(msg string, history Messages, ignore
 					return "", false, fmt.Errorf("failed to read response: %v", err)
 				}
 				decision := strings.TrimSuffix(response, "\n")
+				if suffix, ok := strings.CutPrefix(decision, "a:"); ok {
+					if suffix == "" {
+						continue
+					}
+					msg = suffix
+					break
+				}
 				if decision == "c" {
 					break
 				}

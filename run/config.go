@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	var_template "github.com/xhd2015/go-var-template"
 	"github.com/xhd2015/kode-ai/internal/ioread"
 )
 
@@ -81,8 +82,15 @@ func ApplyConfig(config *FullConfig, token *string, maxRound *int, baseUrl *stri
 		if err != nil {
 			return fmt.Errorf("config system: %w", err)
 		}
+		tpl := var_template.Compile(configSystempPrompt)
+		systemPromtInterploted, err := tpl.Execute(map[string]string{
+			"model": *model,
+		})
+		if err != nil {
+			return fmt.Errorf("interpolate system prompt: %w", err)
+		}
 		// && config.SystemPrompt != "" {
-		*systemPrompt = configSystempPrompt
+		*systemPrompt = systemPromtInterploted
 	}
 
 	// Convert json.RawMessage to strings
