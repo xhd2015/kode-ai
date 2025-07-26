@@ -6,12 +6,13 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/openai/openai-go"
+	"github.com/xhd2015/kode-ai/types"
 	"google.golang.org/genai"
 )
 
 type UnifiedTools []*UnifiedTool
 
-func ParseSchemas(toolFiles []string, toolJSONs []string) (UnifiedTools, error) {
+func ParseSchemas(toolFiles []string, toolJSONs []string, toolDefinitions []*types.UnifiedTool) (UnifiedTools, error) {
 	toolsFromFiles, err := ParseSchemaFiles(toolFiles)
 	if err != nil {
 		return nil, err
@@ -21,6 +22,9 @@ func ParseSchemas(toolFiles []string, toolJSONs []string) (UnifiedTools, error) 
 		return nil, err
 	}
 	tools := append(toolsFromFiles, toolsFromJSONs...)
+	for _, toolDefinition := range toolDefinitions {
+		tools = append(tools, ptrTool(toolDefinition))
+	}
 	return tools, nil
 }
 

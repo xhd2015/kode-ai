@@ -3,26 +3,28 @@ package providers
 import (
 	"fmt"
 	"strings"
+
+	"github.com/xhd2015/kode-ai/types"
 )
 
-type Provider string
+// Re-export provider and API shape types from types package
+type Provider = types.Provider
+type APIShape = types.APIShape
 
 const (
-	ProviderAnthropic  Provider = "anthropic"
-	ProviderGemini     Provider = "gemini"
-	ProviderOpenAI     Provider = "openai"
-	ProviderMoonshot   Provider = "moonshot"
-	ProviderDeepSeek   Provider = "deepseek"
-	ProviderQwen       Provider = "qwen"
-	ProviderOpenRouter Provider = "openrouter"
+	ProviderAnthropic  = types.ProviderAnthropic
+	ProviderGemini     = types.ProviderGemini
+	ProviderOpenAI     = types.ProviderOpenAI
+	ProviderMoonshot   = types.ProviderMoonshot
+	ProviderDeepSeek   = types.ProviderDeepSeek
+	ProviderQwen       = types.ProviderQwen
+	ProviderOpenRouter = types.ProviderOpenRouter
 )
 
-type APIShape string
-
 const (
-	APIShapeOpenAI    APIShape = "openai"
-	APIShapeAnthropic APIShape = "anthropic"
-	APIShapeGemini    APIShape = "gemini"
+	APIShapeOpenAI    = types.APIShapeOpenAI
+	APIShapeAnthropic = types.APIShapeAnthropic
+	APIShapeGemini    = types.APIShapeGemini
 )
 
 func GetModelAPIShape(model string) (APIShape, error) {

@@ -1,4 +1,4 @@
-package run
+package chat
 
 import (
 	"encoding/json"
@@ -7,12 +7,46 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/packages/param"
 	"github.com/xhd2015/kode-ai/internal/jsondecode"
+	"github.com/xhd2015/kode-ai/providers"
 	"github.com/xhd2015/kode-ai/types"
 	"google.golang.org/genai"
 )
 
-// Messages represents a slice of unified messages with conversion methods
+// Messages is a local wrapper for conversion methods
 type Messages []types.Message
+
+// Config represents the client configuration with provider-specific fields
+type Config struct {
+	Model    string             // Required: Model name (e.g., "claude-3-7-sonnet")
+	Token    string             // Required: API token
+	BaseURL  string             // Optional: Custom API base URL
+	Provider providers.Provider // Optional: Auto-detected from model if not specified
+	LogLevel types.LogLevel     // Optional: None, Request, Response, Debug
+}
+
+// Provider-specific message unions for internal use
+type ClientUnion struct {
+	OpenAI    *openai.Client
+	Anthropic *anthropic.Client
+	Gemini    *genai.Client
+}
+
+type MessageHistoryUnion struct {
+	FullHistory   Messages
+	SystemPrompts []string
+
+	OpenAI    []openai.ChatCompletionMessageParamUnion
+	Anthropic []anthropic.MessageParam
+	Gemini    []*genai.Content
+}
+
+type MessagesUnion struct {
+	OpenAI    []openai.ChatCompletionMessageParamUnion
+	Anthropic []anthropic.MessageParam
+	Gemini    []*genai.Content
+}
+
+// Convert Messages to provider-specific formats (reuse existing logic)
 
 // ToOpenAI converts unified messages to OpenAI format
 func (messages Messages) ToOpenAI(keepSystemPrompts bool) (msgs []openai.ChatCompletionMessageParamUnion, systemPrompts []string, err error) {
@@ -76,45 +110,6 @@ func (messages Messages) ToOpenAI(keepSystemPrompts bool) (msgs []openai.ChatCom
 	return msgs, systemPrompts, nil
 }
 
-// ToOpenAILegacy converts unified messages to OpenAI format (legacy method)
-func (messages Messages) ToOpenAILegacy() []openai.ChatCompletionMessageParamUnion {
-	var openaiMessages []openai.ChatCompletionMessageParamUnion
-
-	for _, msg := range messages {
-		switch msg.Role {
-		case types.Role_User:
-			userMsg := openai.ChatCompletionMessageParamUnion{
-				OfUser: &openai.ChatCompletionUserMessageParam{
-					Content: openai.ChatCompletionUserMessageParamContentUnion{
-						OfString: param.NewOpt(msg.Content),
-					},
-				},
-			}
-			openaiMessages = append(openaiMessages, userMsg)
-		case types.Role_Assistant:
-			assistantMsg := openai.ChatCompletionMessageParamUnion{
-				OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-					Content: openai.ChatCompletionAssistantMessageParamContentUnion{
-						OfString: param.NewOpt(msg.Content),
-					},
-				},
-			}
-			openaiMessages = append(openaiMessages, assistantMsg)
-		case types.Role_System:
-			systemMsg := openai.ChatCompletionMessageParamUnion{
-				OfSystem: &openai.ChatCompletionSystemMessageParam{
-					Content: openai.ChatCompletionSystemMessageParamContentUnion{
-						OfString: param.NewOpt(msg.Content),
-					},
-				},
-			}
-			openaiMessages = append(openaiMessages, systemMsg)
-		}
-	}
-
-	return openaiMessages
-}
-
 // ToAnthropic converts unified messages to Anthropic format
 func (messages Messages) ToAnthropic() (msgs []anthropic.MessageParam, systemPrompts []string, err error) {
 	for _, msg := range messages {
@@ -161,6 +156,7 @@ func (messages Messages) ToAnthropic() (msgs []anthropic.MessageParam, systemPro
 	return msgs, systemPrompts, nil
 }
 
+// ToGemini converts unified messages to Gemini format
 func (messages Messages) ToGemini() (msgs []*genai.Content, systemPrompts []string, err error) {
 	for _, msg := range messages {
 		if msg.Role == types.Role_System {
@@ -179,12 +175,6 @@ func (messages Messages) ToGemini() (msgs []*genai.Content, systemPrompts []stri
 
 			parts = append(parts, &genai.Part{
 				FunctionCall: &genai.FunctionCall{
-					// NOTE: Gemini tool use id is only client
-					// side, don't put them back or the API will
-					// report error saying
-					// unrecognized "id" param
-					//
-					// ID:   msg.ToolUseID,
 					Name: msg.ToolName,
 					Args: args,
 				},
@@ -198,7 +188,6 @@ func (messages Messages) ToGemini() (msgs []*genai.Content, systemPrompts []stri
 
 			parts = append(parts, &genai.Part{
 				FunctionResponse: &genai.FunctionResponse{
-					// ID:       msg.ToolUseID,
 					Name:     msg.ToolName,
 					Response: resp,
 				},

@@ -10,6 +10,7 @@ import (
 	anthropic_params "github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/openai/openai-go"
 	openai_params "github.com/openai/openai-go/packages/param"
+	"github.com/xhd2015/kode-ai/types"
 	"github.com/xhd2015/llm-tools/jsonschema"
 	"google.golang.org/genai"
 )
@@ -17,17 +18,14 @@ import (
 //go:embed example_tool.json
 var ExampleTool string
 
-//go:embed unified_tool.go
-var UnifiedToolDef string
-
 // Parse parses a unified tool definition from JSON bytes
 func Parse(data []byte) (*UnifiedTool, error) {
-	var tool UnifiedTool
+	var tool types.UnifiedTool
 	if err := json.Unmarshal(data, &tool); err != nil {
 		return nil, fmt.Errorf("parse unified tool: %w", err)
 	}
 	if tool.Format == "" || tool.Format == "unified" {
-		return &tool, nil
+		return ptrTool(&tool), nil
 	}
 	switch tool.Format {
 	case "openai":
@@ -65,6 +63,8 @@ func ParseToolForAnthropic(data []byte) (*anthropic.ToolParam, error) {
 	return &tool, nil
 }
 
+type UnifiedTool types.UnifiedTool
+
 // ToOpenAI converts UnifiedTool to OpenAI ChatCompletionToolParam
 func (t *UnifiedTool) ToOpenAI() (*openai.ChatCompletionToolParam, error) {
 	return ConvertUnifiedToOpenAI(t)
@@ -78,6 +78,10 @@ func (t *UnifiedTool) ToAnthropic() (*anthropic.ToolParam, error) {
 // ToGemini converts UnifiedTool to Gemini ToolParam
 func (t *UnifiedTool) ToGemini() (*genai.FunctionDeclaration, error) {
 	return ConvertUnifiedToGemini(t)
+}
+
+func ptrTool(t *types.UnifiedTool) *UnifiedTool {
+	return (*UnifiedTool)(t)
 }
 
 // ConvertAnthropicToOpenAI converts Anthropic tool format to OpenAI format

@@ -13,7 +13,9 @@ import (
 
 	"github.com/xhd2015/kode-ai/internal/ioread"
 	"github.com/xhd2015/kode-ai/providers"
+	"github.com/xhd2015/kode-ai/run/mock_server"
 	"github.com/xhd2015/kode-ai/tools"
+	"github.com/xhd2015/kode-ai/types"
 	"github.com/xhd2015/less-gen/flags"
 )
 
@@ -32,6 +34,7 @@ Usage: kode <cmd> [OPTIONS]
 Available commands:
   chat <msg>                      chat with llm, msg can contain @file(path/to/file) directive
   view <files...>                 view recorded chat files
+  mock-server                     start a mock HTTP server for integration testing
   example                         show examples
   version                         version info
   revision                        revision info
@@ -56,6 +59,8 @@ Options:
   --ignore-duplicate-msg          ignore duplicate user msg
   --log-request                   log http request
   --log-chat                      log chat(default: true)
+  --json                          output response as JSON
+  --std-stream                    enable bidirectional tool callback communication via stdin/stdout
   -c,--config FILE                load configuration from JSON file
   -v,--verbose                    show verbose info
 
@@ -116,6 +121,8 @@ func Main(args []string, opts Options) error {
 		return handleChat(cmd, args, opts.BaseCmd, opts.DefaultBaseURL)
 	case "view":
 		return handleView(args)
+	case "mock-server":
+		return handleMockServer(args)
 	case "example", "examples":
 		return handleExample(args)
 	case "version":
@@ -172,6 +179,9 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var verbose bool
 	var mcpServers []string
 	var configFile string
+	var jsonOutput bool
+	var stdStream bool
+	var waitForStreamEvents bool
 
 	flagsParser := flags.String("--token", &token).
 		Int("--max-round", &maxRound).
@@ -191,11 +201,23 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		Bool("-v,--verbose", &verbose).
 		StringSlice("--mcp", &mcpServers).
 		String("-c,--config", &configFile).
+		Bool("--json", &jsonOutput).
+		Bool("--std-stream", &stdStream).
+		Bool("--wait-for-stream-events", &waitForStreamEvents).
 		Help("-h,--help", getHelp(baesCmd))
 
 	args, err = flagsParser.Parse(args)
 	if err != nil {
 		return err
+	}
+
+	if stdStream && jsonOutput {
+		return fmt.Errorf("--std-stream always uses json format, --json is unnecessary")
+	}
+
+	// Validate flag dependencies
+	if waitForStreamEvents && !stdStream {
+		return fmt.Errorf("--wait-for-stream-events requires --std-stream")
 	}
 
 	if len(tools) > 0 {
@@ -299,9 +321,12 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 
 		noCache: noCache,
 
-		ignoreDuplicateMsg: ignoreDuplicateMsg,
-		logChat:            logChat,
-		verbose:            verbose,
+		ignoreDuplicateMsg:  ignoreDuplicateMsg,
+		logChat:             logChat,
+		verbose:             verbose,
+		jsonOutput:          jsonOutput,
+		stdStream:           stdStream,
+		waitForStreamEvents: waitForStreamEvents,
 
 		mcpServers: mcpServers,
 	})
@@ -406,6 +431,15 @@ Examples:
   kode view tmp/chat.json --tools
 `
 
+const maxLimit = 256
+
+func limitPrintLength(s string) string {
+	if len(s) < maxLimit+3 {
+		return s
+	}
+	return s[:maxLimit] + "..."
+}
+
 // just like replay the whole messages
 func handleView(args []string) error {
 	var verbose bool
@@ -455,7 +489,7 @@ func handleView(args []string) error {
 			}
 			m := len(msg)
 			for j := m - 1; j >= 0; j-- {
-				if msg[j].Type == MsgType_Msg && msg[j].Role == "assistant" {
+				if msg[j].Type == types.MsgType_Msg && msg[j].Role == types.Role_Assistant {
 					fmt.Println(msg[j].Content)
 					return nil
 				}
@@ -464,7 +498,7 @@ func handleView(args []string) error {
 		return fmt.Errorf("no assistant message found")
 	}
 
-	var total TokenUsageCost
+	var total types.TokenUsageCost
 	for _, file := range files {
 		msg, err := loadHistoricalMessages(file)
 		if err != nil {
@@ -474,42 +508,42 @@ func handleView(args []string) error {
 		for _, m := range msg {
 			if tools {
 				switch m.Type {
-				case MsgType_ToolCall, MsgType_ToolResult:
+				case types.MsgType_ToolCall, types.MsgType_ToolResult:
 				default:
 					continue
 				}
 			}
 
 			switch m.Type {
-			case MsgType_Msg:
+			case types.MsgType_Msg:
 				fmt.Printf("%s: %s\n", m.Role, m.Content)
-			case MsgType_ToolCall:
+			case types.MsgType_ToolCall:
 				limitedContent := limitPrintLength(m.Content)
 				fmt.Printf("%s: <tool_call tool=%q>%s</tool_call>\n", m.Role, m.ToolName, limitedContent)
-			case MsgType_ToolResult:
+			case types.MsgType_ToolResult:
 				limitedContent := limitPrintLength(m.Content)
 				fmt.Printf("%s: <tool_result tool=%q>%s</tool_result>\n", m.Role, m.ToolName, limitedContent)
-			case MsgType_TokenUsage:
+			case types.MsgType_TokenUsage:
 				provider, err := providers.GetModelAPIShape(m.Model)
 				if err != nil {
 					fmt.Printf("%s: token cost: %v\n", m.Role, err)
 					continue
 				}
-				var tokenUsage TokenUsage
+				var tokenUsage types.TokenUsage
 				if m.TokenUsage != nil {
 					tokenUsage = *m.TokenUsage
 				}
 
 				total.Usage = total.Usage.Add(tokenUsage)
 
-				cost, costOK := computeCost(provider, m.Model, tokenUsage)
+				cost, costOK := providers.ComputeCost(provider, m.Model, tokenUsage)
 				var costUSD string
 				if costOK {
 					costUSD = "$" + cost.TotalUSD
 					total.Cost = total.Cost.Add(cost)
 				}
 				printTokenUsage(os.Stdout, "Token Usage", tokenUsage, costUSD)
-			case MsgType_StopReason:
+			case types.MsgType_StopReason:
 				// nothing
 			default:
 				limitedContent := limitPrintLength(m.Content)
@@ -536,7 +570,7 @@ func mustMarshal(v interface{}) string {
 
 // loadHistoricalMessages loads historical chat messages from the record file in unified format
 func loadHistoricalMessages(recordFile string) (Messages, error) {
-	var messages []Message
+	var messages []types.Message
 
 	file, err := os.Open(recordFile)
 	if err != nil {
@@ -550,7 +584,7 @@ func loadHistoricalMessages(recordFile string) (Messages, error) {
 
 	decoder := json.NewDecoder(file)
 	for {
-		var chatMsg Message
+		var chatMsg types.Message
 		if err := decoder.Decode(&chatMsg); err != nil {
 			if err == io.EOF {
 				// End of file, break the loop
@@ -567,7 +601,7 @@ func loadHistoricalMessages(recordFile string) (Messages, error) {
 }
 
 // appendToRecordFile appends a chat message to the record file
-func appendToRecordFile(recordFile string, msg *Message) error {
+func appendToRecordFile(recordFile string, msg *types.Message) error {
 	if msg.Time == "" {
 		cloneMsg := *msg
 		cloneMsg.Time = time.Now().Format("2006-01-02 15:04:05-07:00")
@@ -611,7 +645,7 @@ func handleExample(args []string) error {
 		fmt.Println("# config.go")
 		fmt.Println(ConfigDef)
 		fmt.Println("# tool.go")
-		fmt.Println(tools.UnifiedToolDef)
+		fmt.Println(types.UnifiedToolDef)
 		return nil
 	}
 	const examples = `
@@ -637,4 +671,57 @@ kode chat --model=gemini-2.5-pro --tool get_workspace_root --tool list_dir --rec
 
 	fmt.Print(strings.TrimPrefix(examples, "\n"))
 	return nil
+}
+
+// handleMockServer starts a mock HTTP server for integration testing
+func handleMockServer(args []string) error {
+	var port int = 8080
+	var provider string = "openai"
+	var firstMsgToolCall bool
+	var help bool
+
+	args, err := flags.Int("--port", &port).
+		String("--provider", &provider).
+		Bool("--first-msg-tool-call", &firstMsgToolCall).
+		Bool("-h,--help", &help).
+		Parse(args)
+	if err != nil {
+		return err
+	}
+
+	if help {
+		fmt.Print(`mock-server - Start a mock HTTP server for integration testing
+
+Usage: kode mock-server [OPTIONS]
+
+Options:
+  --port PORT            port to listen on (default: 8080)
+  --provider PROVIDER    provider to simulate: openai(default), anthropic, gemini, all
+  --first-msg-tool-call  first message respond with tool call when tools are available
+  -h, --help             show this help message
+
+The mock server simulates OpenAI, Anthropic, and Gemini APIs with random responses
+and tool calls for integration testing. Set your base URL to http://localhost:PORT
+to test against this mock server.
+
+Examples:
+  kode mock-server
+  kode mock-server --port 9000 --provider openai
+  kode mock-server --provider anthropic
+  kode mock-server --always-call-tool
+  kode chat --base-url http://localhost:8080 "Hello world"
+`)
+		return nil
+	}
+
+	if len(args) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", args)
+	}
+
+	// Start the mock server using the new package
+	return mock_server.Start(mock_server.Config{
+		Port:             port,
+		Provider:         provider,
+		FirstMsgToolCall: firstMsgToolCall,
+	})
 }

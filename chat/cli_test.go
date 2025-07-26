@@ -1,0 +1,310 @@
+package chat
+
+import (
+	"fmt"
+	"path/filepath"
+	"testing"
+)
+
+func TestNewCLIHandler(t *testing.T) {
+	client, err := NewClient(Config{
+		Model: "claude-3-7-sonnet",
+		Token: "test-token",
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	opts := CliOptions{
+		RecordFile: "test.json",
+		LogChat:    true,
+		Verbose:    false,
+	}
+
+	handler := NewCliHandler(client, opts)
+	if handler == nil {
+		t.Errorf("expected CLI handler but got nil")
+	}
+	if handler.client != client {
+		t.Errorf("expected client to be set correctly")
+	}
+	if handler.opts.RecordFile != "test.json" {
+		t.Errorf("expected record file 'test.json', got '%s'", handler.opts.RecordFile)
+	}
+}
+
+func TestCLIOptionsValidation(t *testing.T) {
+	client, err := NewClient(Config{
+		Model: "claude-3-7-sonnet",
+		Token: "test-token",
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	// Test all CLI options
+	opts := CliOptions{
+		RecordFile:         "session.json",
+		IgnoreDuplicateMsg: true,
+		LogRequest:         true,
+		LogChat:            true,
+		Verbose:            true,
+	}
+
+	handler := NewCliHandler(client, opts)
+	if handler.opts.RecordFile != "session.json" {
+		t.Errorf("expected record file 'session.json', got '%s'", handler.opts.RecordFile)
+	}
+	if !handler.opts.IgnoreDuplicateMsg {
+		t.Errorf("expected IgnoreDuplicateMsg to be true")
+	}
+	if !handler.opts.LogRequest {
+		t.Errorf("expected LogRequest to be true")
+	}
+	if !handler.opts.LogChat {
+		t.Errorf("expected LogChat to be true")
+	}
+	if !handler.opts.Verbose {
+		t.Errorf("expected Verbose to be true")
+	}
+}
+
+func TestCLIHandlerLoadHistory(t *testing.T) {
+	client, err := NewClient(Config{
+		Model: "claude-3-7-sonnet",
+		Token: "test-token",
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	// Test with non-existent file
+	handler := NewCliHandler(client, CliOptions{
+		RecordFile: "non_existent.json",
+	})
+
+	history, err := handler.loadHistory()
+	if err != nil {
+		t.Errorf("expected no error for non-existent file, got: %v", err)
+	}
+	if history != nil {
+		t.Errorf("expected nil history for non-existent file, got: %v", history)
+	}
+
+	// Test with empty record file
+	handler = NewCliHandler(client, CliOptions{
+		RecordFile: "",
+	})
+
+	history, err = handler.loadHistory()
+	if err != nil {
+		t.Errorf("expected no error for empty record file, got: %v", err)
+	}
+	if history != nil {
+		t.Errorf("expected nil history for empty record file, got: %v", history)
+	}
+}
+
+func TestCLIHandlerSaveToRecord(t *testing.T) {
+	client, err := NewClient(Config{
+		Model: "claude-3-7-sonnet",
+		Token: "test-token",
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	// Create temporary file
+	tmpDir := t.TempDir()
+	recordFile := filepath.Join(tmpDir, "test_record.json")
+
+	handler := NewCliHandler(client, CliOptions{
+		RecordFile: recordFile,
+	})
+
+	// Save a message
+	msg := CreateMessage(MsgType_Msg, Role_User, "test-model", "test message")
+	err = handler.saveToRecord(msg)
+	if err != nil {
+		t.Errorf("unexpected error saving to record: %v", err)
+	}
+
+	// Verify the message was saved
+	history, err := handler.loadHistory()
+	if err != nil {
+		t.Errorf("unexpected error loading history: %v", err)
+	}
+	if len(history) != 1 {
+		t.Errorf("expected 1 message in history, got %d", len(history))
+	}
+	if history[0].Content != "test message" {
+		t.Errorf("expected content 'test message', got '%s'", history[0].Content)
+	}
+}
+
+func TestCLIHandlerCheckDuplicateMessage(t *testing.T) {
+	client, err := NewClient(Config{
+		Model: "claude-3-7-sonnet",
+		Token: "test-token",
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	// Create history with a user message
+	history := []Message{
+		CreateMessage(MsgType_Msg, Role_User, "test-model", "hello world"),
+		CreateMessage(MsgType_Msg, Role_Assistant, "test-model", "Hi there!"),
+	}
+
+	// Test with ignore duplicate enabled
+	handler := NewCliHandler(client, CliOptions{
+		IgnoreDuplicateMsg: true,
+	})
+
+	msg, stop, err := handler.checkDuplicateMessage("hello world", history)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if stop {
+		t.Errorf("expected not to stop but got stop=true")
+	}
+	if msg != "" {
+		t.Errorf("expected empty message when ignoring duplicates, got '%s'", msg)
+	}
+
+	// Test with different message
+	msg, stop, err = handler.checkDuplicateMessage("different message", history)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if stop {
+		t.Errorf("expected not to stop for different message")
+	}
+	if msg != "different message" {
+		t.Errorf("expected 'different message', got '%s'", msg)
+	}
+
+	// Test with empty history
+	msg, stop, err = handler.checkDuplicateMessage("any message", []Message{})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if stop {
+		t.Errorf("expected not to stop for empty history")
+	}
+	if msg != "any message" {
+		t.Errorf("expected 'any message', got '%s'", msg)
+	}
+}
+
+func TestCLIHandlerFormatOutput(t *testing.T) {
+	client, err := NewClient(Config{
+		Model: "claude-3-7-sonnet",
+		Token: "test-token",
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	handler := NewCliHandler(client, CliOptions{
+		LogChat: true,
+		Verbose: true,
+	})
+
+	// Test different event types (these don't produce output we can easily test,
+	// but we can at least verify they don't panic)
+	events := []Event{
+		{
+			Type:    EventTypeMessage,
+			Content: "Hello world",
+		},
+		{
+			Type:    EventTypeToolCall,
+			Content: `{"param": "value"}`,
+			Metadata: map[string]interface{}{
+				"tool_name": "test_tool",
+			},
+		},
+		{
+			Type:    EventTypeToolResult,
+			Content: "Tool result",
+		},
+		{
+			Type: EventTypeRoundStart,
+			Metadata: map[string]interface{}{
+				"max_rounds": 3,
+			},
+		},
+		{
+			Type: EventTypeRoundEnd,
+			Metadata: map[string]interface{}{
+				"rounds_used": 2,
+			},
+		},
+		{
+			Type: EventTypeTokenUsage,
+			Metadata: map[string]interface{}{
+				"usage": TokenUsage{Total: 100},
+				"round": 1,
+			},
+		},
+		{
+			Type:  EventTypeError,
+			Error: fmt.Errorf("test error"),
+		},
+		{
+			Type:    EventTypeCacheInfo,
+			Content: "Prompt cache enabled with claude-3-7-sonnet",
+			Metadata: map[string]interface{}{
+				"cache_enabled": true,
+				"model":         "claude-3-7-sonnet",
+			},
+		},
+	}
+
+	// Call formatOutput for each event type (should not panic)
+	for _, event := range events {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("formatOutput panicked for event type %s: %v", event.Type, r)
+				}
+			}()
+			handler.formatOutput(event)
+		}()
+	}
+}
+
+func TestCLIHandlerPrintTokenUsage(t *testing.T) {
+	client, err := NewClient(Config{
+		Model: "claude-3-7-sonnet",
+		Token: "test-token",
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	handler := NewCliHandler(client, CliOptions{})
+
+	usage := TokenUsage{
+		Input:  100,
+		Output: 50,
+		Total:  150,
+		InputBreakdown: TokenUsageInputBreakdown{
+			CacheRead:    10,
+			CacheWrite:   5,
+			NonCacheRead: 85,
+		},
+	}
+
+	// This should not panic
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("printTokenUsage panicked: %v", r)
+			}
+		}()
+		handler.printTokenUsage("Test Usage", usage, "$0.10")
+	}()
+}

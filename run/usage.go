@@ -7,95 +7,8 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/xhd2015/kode-ai/internal/markdown"
 	"github.com/xhd2015/kode-ai/providers"
+	"github.com/xhd2015/kode-ai/types"
 )
-
-type TokenUsageCost struct {
-	Usage TokenUsage
-	Cost  TokenCost
-}
-
-// Anthropic:
-//   - how to: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
-//   - when: https://www.anthropic.com/news/prompt-caching
-//   - summary:
-//     . seems anthropic only caches for long enough texts
-//     . The minimum cacheable prompt length is:
-//     . 1024 tokens for Claude Opus 4, Claude Sonnet 4, Claude Sonnet 3.7, Claude Sonnet 3.5 and Claude Opus 3
-//     . The cache is invalidated after 5 minutes
-type TokenUsage struct {
-	Input  int64 `json:"input"`
-	Output int64 `json:"output"`
-	Total  int64 `json:"total"`
-
-	InputBreakdown  TokenUsageInputBreakdown  `json:"input_breakdown"`
-	OutputBreakdown TokenUsageOutputBreakdown `json:"output_breakdown"`
-}
-
-type TokenUsageInputBreakdown struct {
-	CacheWrite   int64 `json:"cache_write"` // anthropic specific
-	CacheRead    int64 `json:"cache_read"`
-	NonCacheRead int64 `json:"non_cache_read"`
-}
-
-type TokenUsageOutputBreakdown struct {
-	CacheOutput int64 `json:"cache_output"`
-}
-
-func (c TokenUsage) Add(b TokenUsage) TokenUsage {
-	return TokenUsage{
-		Input:           c.Input + b.Input,
-		Output:          c.Output + b.Output,
-		Total:           c.Total + b.Total,
-		InputBreakdown:  c.InputBreakdown.Add(b.InputBreakdown),
-		OutputBreakdown: c.OutputBreakdown.Add(b.OutputBreakdown),
-	}
-}
-
-func (c TokenUsageInputBreakdown) Add(b TokenUsageInputBreakdown) TokenUsageInputBreakdown {
-	return TokenUsageInputBreakdown{
-		CacheRead:  c.CacheRead + b.CacheRead,
-		CacheWrite: c.CacheWrite + b.CacheWrite,
-	}
-}
-func (c TokenUsageOutputBreakdown) Add(b TokenUsageOutputBreakdown) TokenUsageOutputBreakdown {
-	return TokenUsageOutputBreakdown{
-		CacheOutput: c.CacheOutput + b.CacheOutput,
-	}
-}
-
-type TokenCost struct {
-	// the three are available for all providers
-	InputUSD  string
-	OutputUSD string
-	TotalUSD  string
-
-	// Input breakdown
-	// anthropic has this detail
-	InputBreakdown TokenCostInputBreakdown
-}
-
-func (c TokenCost) Add(b TokenCost) TokenCost {
-	return TokenCost{
-		InputUSD:       addDecimals(c.InputUSD, b.InputUSD),
-		OutputUSD:      addDecimals(c.OutputUSD, b.OutputUSD),
-		TotalUSD:       addDecimals(c.TotalUSD, b.TotalUSD),
-		InputBreakdown: c.InputBreakdown.Add(b.InputBreakdown),
-	}
-}
-
-type TokenCostInputBreakdown struct {
-	CacheWriteUSD   string
-	CacheReadUSD    string
-	NonCacheReadUSD string
-}
-
-func (c TokenCostInputBreakdown) Add(b TokenCostInputBreakdown) TokenCostInputBreakdown {
-	return TokenCostInputBreakdown{
-		CacheWriteUSD:   addDecimals(c.CacheWriteUSD, b.CacheWriteUSD),
-		CacheReadUSD:    addDecimals(c.CacheReadUSD, b.CacheReadUSD),
-		NonCacheReadUSD: addDecimals(c.NonCacheReadUSD, b.NonCacheReadUSD),
-	}
-}
 
 func showUsageFromRecordFile(recordFile string) error {
 	// read the record file
@@ -109,10 +22,10 @@ func showUsageFromRecordFile(recordFile string) error {
 
 func showUsageFromMessages(messages Messages) error {
 	// calculate the usage
-	var total TokenUsageCost
-	var costs []TokenUsageCost
+	var total types.TokenUsageCost
+	var costs []types.TokenUsageCost
 	for _, msg := range messages {
-		if msg.Type != MsgType_TokenUsage {
+		if msg.Type != types.MsgType_TokenUsage {
 			continue
 		}
 		if msg.TokenUsage == nil {
@@ -125,11 +38,11 @@ func showUsageFromMessages(messages Messages) error {
 			return err
 		}
 
-		modelCost, ok := computeCost(provider, msg.Model, *msg.TokenUsage)
+		modelCost, ok := providers.ComputeCost(provider, msg.Model, *msg.TokenUsage)
 		if !ok {
 			return fmt.Errorf("cannot compute cost for model: %s", msg.Model)
 		}
-		costs = append(costs, TokenUsageCost{
+		costs = append(costs, types.TokenUsageCost{
 			Usage: *msg.TokenUsage,
 			Cost:  modelCost,
 		})
@@ -179,54 +92,7 @@ func addDecimals(nums ...string) string {
 	return sum.String()
 }
 
-var _1M = decimal.NewFromInt(1e6)
-
-func computeCost(apiShape providers.APIShape, model string, usage TokenUsage) (TokenCost, bool) {
-	costDef, ok := providers.GetModelCost(model)
-	if !ok {
-		return TokenCost{}, false
-	}
-	var inputUSD decimal.Decimal
-	var inputBreakdown TokenCostInputBreakdown
-	if apiShape == providers.APIShapeAnthropic {
-		inputCacheWriteUSD := requireFromString(costDef.InputCacheWriteUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheWrite)).Div(_1M)
-		inputNonCacheReadUSD := requireFromString(costDef.InputUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.NonCacheRead)).Div(_1M)
-		inputCacheReadUSD := requireFromString(costDef.InputCacheReadUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheRead)).Div(_1M)
-
-		inputUSD = inputCacheWriteUSD.Add(inputNonCacheReadUSD).Add(inputCacheReadUSD)
-		inputBreakdown = TokenCostInputBreakdown{
-			CacheWriteUSD:   inputCacheWriteUSD.String(),
-			CacheReadUSD:    inputCacheReadUSD.String(),
-			NonCacheReadUSD: inputNonCacheReadUSD.String(),
-		}
-	} else {
-		inputCacheWriteUSD := decimal.Zero
-		if costDef.InputCacheWriteUSDPer1M != "" {
-			inputCacheWriteUSD = requireFromString(costDef.InputCacheWriteUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheWrite)).Div(_1M)
-		}
-
-		if costDef.InputCacheReadUSDPer1M != "" {
-			inputCacheReadUSD := requireFromString(costDef.InputCacheReadUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.CacheRead)).Div(_1M)
-			nonCahceReadUSD := requireFromString(costDef.InputUSDPer1M).Mul(decimal.NewFromInt(usage.InputBreakdown.NonCacheRead)).Div(_1M)
-
-			inputUSD = inputCacheReadUSD.Add(nonCahceReadUSD).Add(inputCacheWriteUSD)
-		} else {
-			inputUSD = requireFromString(costDef.InputUSDPer1M).Mul(decimal.NewFromInt(usage.Input)).Div(_1M)
-		}
-	}
-
-	outputUSD := requireFromString(costDef.OutputUSDPer1M).Mul(decimal.NewFromInt(usage.Output)).Div(_1M)
-
-	totalUSD := inputUSD.Add(outputUSD)
-	return TokenCost{
-		InputUSD:       inputUSD.String(),
-		OutputUSD:      outputUSD.String(),
-		TotalUSD:       totalUSD.String(),
-		InputBreakdown: inputBreakdown,
-	}, true
-}
-
-func printTokenUsage(w io.Writer, title string, tokenUsage TokenUsage, cost string) {
+func printTokenUsage(w io.Writer, title string, tokenUsage types.TokenUsage, cost string) {
 	fmt.Fprintf(w, "%s - Input: %d, Cache/R: %d, Cache/W: %d, NonCache/R: %d, Output: %d, Total: %d, Cost: %s\n",
 		title,
 		tokenUsage.Input,
