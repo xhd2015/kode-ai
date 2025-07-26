@@ -94,7 +94,8 @@ func (sr *stdinReaderImpl) Unsubscribe(id string) {
 	}
 }
 
-const STREAM_ACK_TIMEOUT = 100 * time.Second
+// const STREAM_ACK_TIMEOUT = 100 * time.Second
+const STREAM_ACK_TIMEOUT = 1 * time.Second
 
 var ErrStreamEnd = fmt.Errorf("stream end")
 

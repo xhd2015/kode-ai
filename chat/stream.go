@@ -11,8 +11,6 @@ import (
 	"github.com/xhd2015/kode-ai/types"
 )
 
-// const TOOL_ACK_TIMEOUT = 1 * time.Second
-
 // executeToolWithStream executes a tool using bidirectional stream communication
 // Enhanced protocol with background stdin reader:
 // 1. Write tool_call_request to stdout
