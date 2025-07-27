@@ -1,3 +1,5 @@
+github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
+github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/xhd2015/kode-ai/types v0.0.2 h1:uCGyni5qPV6o9iFVHWxXCe2LD7IdCvSRANMfAb1QV2M=
 github.com/xhd2015/kode-ai/types v0.0.2/go.mod h1:cVOvRFRKGsKZuqYfZoi0+4eM+Z45fZWTHObJuvqcgTY=
 github.com/xhd2015/llm-tools v0.0.17 h1:77mSN/sVq2ExQ18/9xDd28+D/2C831lstxJpMI0jLyo=

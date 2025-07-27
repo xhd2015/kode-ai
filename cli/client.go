@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/xhd2015/kode-ai/types"
@@ -25,12 +26,21 @@ func NewClient(config types.Config) (*Client, error) {
 	}, nil
 }
 
-func (c *session) writeEvent(event types.Message) error {
-	return c.writeEventOpts(event)
-}
+// Chat performs a chat conversation using the CLI binary
+func (c *Client) Chat(ctx context.Context, message string, opts ...types.ChatOption) (*types.Response, error) {
+	req := types.Request{
+		Model:   c.config.Model,
+		Token:   c.config.Token,
+		BaseURL: c.config.BaseURL,
+		Message: message,
+	}
 
-func (c *session) writeEventNoLock(event types.Message) error {
-	return c.writeEventOpts(event)
+	// Apply options
+	for _, opt := range opts {
+		opt(&req)
+	}
+
+	return Chat(ctx, req)
 }
 
 func (c *session) writeEventOpts(event types.Message) error {

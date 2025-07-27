@@ -6,7 +6,7 @@
 // Go function callbacks, making it feel identical to using the chat package
 // directly.
 //
-// Usage Example:
+// Usage Example (CLI Binary):
 //
 //	import "github.com/xhd2015/kode-ai/cli"
 //
@@ -40,6 +40,31 @@
 //		}),
 //	)
 //
+// Usage Example (WebSocket Server):
+//
+//	import "github.com/xhd2015/kode-ai/cli"
+//
+//	// Connect to a WebSocket chat server
+//	response, err := cli.ChatWithServer(ctx, "http://localhost:8080", types.Request{
+//		Message: "Hello, world!",
+//		SystemPrompt: "You are a helpful assistant",
+//		Tools: []string{"list_dir", "read_file"},
+//		EventCallback: func(event types.Message) {
+//			fmt.Printf("Event: %s - %s\n", event.Type, event.Content)
+//		},
+//		ToolCallback: func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
+//			// Custom tool handling via WebSocket stream protocol
+//			if call.Name == "custom_tool" {
+//				return types.ToolResult{
+//					Content: map[string]interface{}{
+//						"result": "Custom tool executed successfully",
+//					},
+//				}, true, nil
+//			}
+//			return types.ToolResult{}, false, nil // Let builtin tools handle it
+//		},
+//	})
+//
 // Key Features:
 //
 // - Drop-in replacement for the chat package
@@ -48,11 +73,16 @@
 // - Provides event callbacks for real-time event processing
 // - Supports custom tool callbacks via bidirectional stream protocol
 // - Pure binary dependency - no need to import chat package dependencies
+// - WebSocket server support for distributed chat systems
 //
 // The client communicates with the kode CLI process via stdin/stdout using JSON
 // messages. Events from the CLI are parsed and converted to Go function callbacks.
 // Tool callbacks use a bidirectional stream protocol where the CLI sends tool_call_request
 // messages and waits for tool_call_response messages, providing a seamless integration experience.
+//
+// The ChatWithServer function connects to a WebSocket server running the chat-server
+// subcommand, allowing for distributed chat systems where the AI processing happens
+// on a remote server while maintaining the same programming interface.
 package cli
 
 import (
@@ -283,7 +313,7 @@ func (c *session) chat(ctx context.Context, req types.Request, opts ...CliOption
 }
 
 // handleSingleToolCallback handles a single tool callback request using the stream protocol
-func (c *session) handleSingleToolCallback(ctx context.Context, toolCallRequest types.Message, stdin io.Writer, toolCallback types.ToolCallback) {
+func (c *session) handleSingleToolCallback(ctx context.Context, toolCallRequest types.Message, toolCallback types.ToolCallback) {
 	if c.stream == nil {
 		return
 	}
@@ -429,7 +459,7 @@ func (c *session) processStdoutWithToolCallbacks(ctx context.Context, stdin io.W
 					foundToolCallback = toolCallback
 				}
 				if foundToolCallback != nil {
-					c.handleSingleToolCallback(ctx, msg, stdin, foundToolCallback)
+					c.handleSingleToolCallback(ctx, msg, foundToolCallback)
 					continue
 				}
 				unableToHandle = true
@@ -484,6 +514,14 @@ func (c *session) processStdoutWithToolCallbacks(ctx context.Context, stdin io.W
 	response.LastAssistantMsg = c.lastAssistantMsg
 
 	return &response, nil
+}
+
+func (c *session) writeEvent(event types.Message) error {
+	return c.writeEventOpts(event)
+}
+
+func (c *session) writeEventNoLock(event types.Message) error {
+	return c.writeEventOpts(event)
 }
 
 func makeCmdToolCallback(toolDef *types.UnifiedTool) func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {

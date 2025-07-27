@@ -73,7 +73,6 @@ func TestClientInterface(t *testing.T) {
 		WithSystemPrompt("test system"),
 		WithMaxRounds(1),
 		WithTools("list_dir"),
-		WithToolFiles("tool.json"),
 		WithToolDefinitions(&types.UnifiedTool{
 			Name: "test",
 			Handle: func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
@@ -110,6 +109,7 @@ func TestFunctionalOptions(t *testing.T) {
 	WithMaxRounds(5)(&req)
 	WithTools("tool1", "tool2")(&req)
 	WithToolFiles("file1.json", "file2.json")(&req)
+	WithToolJSONs("{\"name\":\"tool1\"}", "{\"name\":\"tool2\"}")(&req)
 	WithToolDefinitions(&types.UnifiedTool{
 		Name: "tool1",
 		Handle: func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
@@ -141,6 +141,9 @@ func TestFunctionalOptions(t *testing.T) {
 	}
 	if len(req.ToolJSONs) != 2 {
 		t.Errorf("Expected 2 tool JSONs, got %d", len(req.ToolJSONs))
+	}
+	if len(req.ToolDefinitions) != 2 {
+		t.Errorf("Expected 2 tool definitions, got %d", len(req.ToolDefinitions))
 	}
 	if req.DefaultToolCwd != "/test" {
 		t.Errorf("Expected default tool cwd '/test', got '%s'", req.DefaultToolCwd)

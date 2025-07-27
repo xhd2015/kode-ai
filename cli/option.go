@@ -26,6 +26,11 @@ func WithToolFiles(files ...string) types.ChatOption {
 	return types.WithToolFiles(files...)
 }
 
+// WithToolJSONs specifies custom tool definitions as JSON strings
+func WithToolJSONs(jsons ...string) types.ChatOption {
+	return types.WithToolJSONs(jsons...)
+}
+
 func WithToolDefinitions(tool ...*types.UnifiedTool) types.ChatOption {
 	return types.WithToolDefinitions(tool...)
 }
