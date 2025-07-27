@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/kode-ai/run/mock_server"
+	"github.com/xhd2015/kode-ai/types"
 )
 
 // startMockServer starts a mock server on a random available port and returns the base URL
@@ -109,26 +110,8 @@ func TestChatIntegrationOpenAI(t *testing.T) {
 		t.Fatal("expected response but got nil")
 	}
 
-	// Check that we got messages
-	if len(response.Messages) == 0 {
-		t.Fatal("expected messages but got none")
-	}
-
-	// Find the assistant message
-	var assistantMessage *Message
-	for _, msg := range response.Messages {
-		if msg.Role == Role_Assistant && msg.Type == MsgType_Msg {
-			assistantMessage = &msg
-			break
-		}
-	}
-
-	if assistantMessage == nil {
-		t.Fatal("expected assistant message but got none")
-	}
-
 	// Check that we got a response (content can vary due to random responses)
-	if assistantMessage.Content == "" {
+	if response.LastAssistantMsg == "" {
 		t.Error("expected non-empty response content")
 	}
 
@@ -171,26 +154,8 @@ func TestChatIntegrationAnthropic(t *testing.T) {
 		t.Fatal("expected response but got nil")
 	}
 
-	// Check that we got messages
-	if len(response.Messages) == 0 {
-		t.Fatal("expected messages but got none")
-	}
-
-	// Find the assistant message
-	var assistantMessage *Message
-	for _, msg := range response.Messages {
-		if msg.Role == Role_Assistant && msg.Type == MsgType_Msg {
-			assistantMessage = &msg
-			break
-		}
-	}
-
-	if assistantMessage == nil {
-		t.Fatal("expected assistant message but got none")
-	}
-
 	// Check that we got a response (content can vary due to random responses)
-	if assistantMessage.Content == "" {
+	if response.LastAssistantMsg == "" {
 		t.Error("expected non-empty response content")
 	}
 
@@ -225,26 +190,8 @@ func TestChatIntegrationGemini(t *testing.T) {
 		t.Fatal("expected response but got nil")
 	}
 
-	// Check that we got messages
-	if len(response.Messages) == 0 {
-		t.Fatal("expected messages but got none")
-	}
-
-	// Find the assistant message
-	var assistantMessage *Message
-	for _, msg := range response.Messages {
-		if msg.Role == Role_Assistant && msg.Type == MsgType_Msg {
-			assistantMessage = &msg
-			break
-		}
-	}
-
-	if assistantMessage == nil {
-		t.Fatal("expected assistant message but got none")
-	}
-
 	// Check that we got a response (content can vary due to random responses)
-	if assistantMessage.Content == "" {
+	if response.LastAssistantMsg == "" {
 		t.Error("expected non-empty response content")
 	}
 
@@ -294,9 +241,9 @@ func TestChatWithHistory(t *testing.T) {
 	}
 
 	// Create history
-	history := []Message{
-		{Type: MsgType_Msg, Role: Role_User, Content: "Previous question"},
-		{Type: MsgType_Msg, Role: Role_Assistant, Content: "Previous answer"},
+	history := []types.Message{
+		{Type: types.MsgType_Msg, Role: types.Role_User, Content: "Previous question"},
+		{Type: types.MsgType_Msg, Role: types.Role_Assistant, Content: "Previous answer"},
 	}
 
 	// Test with history
@@ -326,8 +273,8 @@ func TestChatWithEventCallback(t *testing.T) {
 	}
 
 	// Track events
-	var events []Event
-	eventCallback := func(event Event) {
+	var events []types.Message
+	eventCallback := func(event types.Message) {
 		events = append(events, event)
 	}
 
@@ -343,6 +290,13 @@ func TestChatWithEventCallback(t *testing.T) {
 		t.Fatal("expected response but got nil")
 	}
 
+	// Verify we got a response
+	if response.LastAssistantMsg == "" {
+		t.Error("Expected to receive an assistant message")
+	}
+
+	t.Logf("Integration test with event callback completed. Response: %s", response.LastAssistantMsg)
+
 	// Verify events were captured
 	if len(events) == 0 {
 		t.Error("expected events to be captured but got none")
@@ -351,7 +305,7 @@ func TestChatWithEventCallback(t *testing.T) {
 	// Check for message event
 	hasMessageEvent := false
 	for _, event := range events {
-		if event.Type == EventTypeMessage {
+		if event.Type == types.MsgType_Msg {
 			hasMessageEvent = true
 			break
 		}
@@ -375,12 +329,12 @@ func TestChatRequestAPI(t *testing.T) {
 	}
 
 	// Test ChatRequest API
-	req := Request{
+	req := types.Request{
 		Message:      "Hello from ChatRequest",
 		SystemPrompt: "You are a test assistant",
 		MaxRounds:    1,
-		History: []Message{
-			{Type: MsgType_Msg, Role: Role_User, Content: "Previous message"},
+		History: []types.Message{
+			{Type: types.MsgType_Msg, Role: types.Role_User, Content: "Previous message"},
 		},
 	}
 
@@ -393,28 +347,12 @@ func TestChatRequestAPI(t *testing.T) {
 		t.Fatal("expected response but got nil")
 	}
 
-	// Check that we got messages
-	if len(response.Messages) == 0 {
-		t.Fatal("expected messages but got none")
-	}
-
-	// Find the assistant message
-	var assistantMessage *Message
-	for _, msg := range response.Messages {
-		if msg.Role == Role_Assistant && msg.Type == MsgType_Msg {
-			assistantMessage = &msg
-			break
-		}
-	}
-
-	if assistantMessage == nil {
-		t.Fatal("expected assistant message but got none")
-	}
-
 	// Check that we got a response (content can vary due to random responses)
-	if assistantMessage.Content == "" {
+	if response.LastAssistantMsg == "" {
 		t.Error("expected non-empty response content")
 	}
+
+	t.Logf("Integration test with ChatRequest completed. Response: %s", response.LastAssistantMsg)
 }
 
 // Test error handling
@@ -498,14 +436,14 @@ func TestChatWithToolCallback(t *testing.T) {
 
 	// Custom tool callback
 	toolCalled := false
-	toolCallback := func(ctx context.Context, call ToolCall) (ToolResult, bool, error) {
+	toolCallback := func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
 		toolCalled = true
 		if call.Name == "test_tool" {
-			return ToolResult{
+			return types.ToolResult{
 				Content: "Tool executed successfully",
 			}, true, nil // handled=true
 		}
-		return ToolResult{}, false, fmt.Errorf("unknown tool: %s", call.Name) // handled=false, with error
+		return types.ToolResult{}, false, fmt.Errorf("unknown tool: %s", call.Name) // handled=false, with error
 	}
 
 	// Test with tool callback - the mock server may or may not return tool calls

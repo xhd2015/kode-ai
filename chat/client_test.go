@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/xhd2015/kode-ai/providers"
+	"github.com/xhd2015/kode-ai/types"
 )
 
 func TestNewClient(t *testing.T) {
@@ -70,11 +70,11 @@ func TestNewClient(t *testing.T) {
 func TestClientAPIShapeDetection(t *testing.T) {
 	tests := []struct {
 		model            string
-		expectedAPIShape providers.APIShape
+		expectedAPIShape types.APIShape
 	}{
-		{"claude-3-7-sonnet", providers.APIShapeAnthropic},
-		{"gpt-4o", providers.APIShapeOpenAI},
-		{"gemini-2.0-flash", providers.APIShapeGemini},
+		{"claude-3-7-sonnet", types.APIShapeAnthropic},
+		{"gpt-4o", types.APIShapeOpenAI},
+		{"gemini-2.0-flash", types.APIShapeGemini},
 	}
 
 	for _, tt := range tests {
@@ -110,7 +110,7 @@ func TestChatRequestValidation(t *testing.T) {
 }
 
 func TestChatOptions(t *testing.T) {
-	req := &Request{}
+	req := &types.Request{}
 
 	// Test WithSystemPrompt
 	WithSystemPrompt("test prompt")(req)
@@ -137,8 +137,8 @@ func TestChatOptions(t *testing.T) {
 	}
 
 	// Test WithHistory
-	history := []Message{
-		{Type: MsgType_Msg, Role: Role_User, Content: "test"},
+	history := []types.Message{
+		{Type: types.MsgType_Msg, Role: types.Role_User, Content: "test"},
 	}
 	WithHistory(history)(req)
 	if len(req.History) != 1 || req.History[0].Content != "test" {
@@ -147,33 +147,32 @@ func TestChatOptions(t *testing.T) {
 }
 
 func TestEventTypes(t *testing.T) {
-	// Test that all event types are defined
-	eventTypes := []EventType{
-		EventTypeMessage,
-		EventTypeToolCall,
-		EventTypeToolResult,
-		EventTypeTokenUsage,
-		EventTypeRoundStart,
-		EventTypeRoundEnd,
-		EventTypeError,
-		EventTypeCacheInfo,
+	// Test that all message types are defined
+	messageTypes := []types.MsgType{
+		types.MsgType_Msg,
+		types.MsgType_ToolCall,
+		types.MsgType_ToolResult,
+		types.MsgType_TokenUsage,
+		types.MsgType_Error,
+		types.MsgType_CacheInfo,
 	}
 
-	for _, et := range eventTypes {
-		if string(et) == "" {
-			t.Errorf("event type should not be empty")
+	// Verify they are not empty strings
+	for _, msgType := range messageTypes {
+		if string(msgType) == "" {
+			t.Errorf("message type should not be empty")
 		}
 	}
 }
 
 func TestMessageTypes(t *testing.T) {
 	// Test that all message types are defined
-	msgTypes := []MsgType{
-		MsgType_Msg,
-		MsgType_ToolCall,
-		MsgType_ToolResult,
-		MsgType_TokenUsage,
-		MsgType_StopReason,
+	msgTypes := []types.MsgType{
+		types.MsgType_Msg,
+		types.MsgType_ToolCall,
+		types.MsgType_ToolResult,
+		types.MsgType_TokenUsage,
+		types.MsgType_StopReason,
 	}
 
 	for _, mt := range msgTypes {
@@ -185,10 +184,10 @@ func TestMessageTypes(t *testing.T) {
 
 func TestRoles(t *testing.T) {
 	// Test that all roles are defined
-	roles := []Role{
-		Role_User,
-		Role_Assistant,
-		Role_System,
+	roles := []types.Role{
+		types.Role_User,
+		types.Role_Assistant,
+		types.Role_System,
 	}
 
 	for _, r := range roles {
@@ -199,22 +198,22 @@ func TestRoles(t *testing.T) {
 }
 
 func TestTokenUsageAdd(t *testing.T) {
-	usage1 := TokenUsage{
+	usage1 := types.TokenUsage{
 		Input:  100,
 		Output: 50,
 		Total:  150,
-		InputBreakdown: TokenUsageInputBreakdown{
+		InputBreakdown: types.TokenUsageInputBreakdown{
 			CacheRead:    10,
 			CacheWrite:   5,
 			NonCacheRead: 85,
 		},
 	}
 
-	usage2 := TokenUsage{
+	usage2 := types.TokenUsage{
 		Input:  200,
 		Output: 100,
 		Total:  300,
-		InputBreakdown: TokenUsageInputBreakdown{
+		InputBreakdown: types.TokenUsageInputBreakdown{
 			CacheRead:    20,
 			CacheWrite:   10,
 			NonCacheRead: 170,

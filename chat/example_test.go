@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/xhd2015/kode-ai/chat"
+	"github.com/xhd2015/kode-ai/types"
 )
 
 // ExampleClient demonstrates basic usage of the chat library
@@ -27,7 +28,7 @@ func ExampleClient() {
 		return
 	}
 
-	fmt.Printf("Response: %s\n", response.Messages[0].Content[:50]+"...")
+	fmt.Printf("Response: %s\n", response.LastAssistantMsg[:50]+"...")
 	fmt.Printf("Token usage: %d\n", response.TokenUsage.Total)
 }
 
@@ -45,13 +46,13 @@ func ExampleClient_withTools() {
 	// Chat with tools and custom callback
 	response, err := client.Chat(context.Background(), "List files in current directory",
 		chat.WithTools("file_list"),
-		chat.WithEventCallback(func(event chat.Event) {
+		chat.WithEventCallback(func(event types.Message) {
 			switch event.Type {
-			case chat.EventTypeMessage:
+			case types.MsgType_Msg:
 				fmt.Print(event.Content)
-			case chat.EventTypeToolCall:
-				fmt.Printf("\n🔧 Calling tool: %s\n", event.Metadata["tool_name"])
-			case chat.EventTypeToolResult:
+			case types.MsgType_ToolCall:
+				fmt.Printf("\n🔧 Calling tool: %s\n", event.ToolName)
+			case types.MsgType_ToolResult:
 				fmt.Printf("✅ Tool completed\n")
 			}
 		}),
@@ -61,7 +62,7 @@ func ExampleClient_withTools() {
 		return
 	}
 
-	fmt.Printf("Tool calls made: %d\n", len(response.ToolCalls))
+	fmt.Printf("Response: %s\n", response.LastAssistantMsg)
 }
 
 // ExampleClient_withCustomToolCallback demonstrates custom tool handling
@@ -76,7 +77,7 @@ func ExampleClient_withCustomToolCallback() {
 	}
 
 	// Custom tool handler
-	toolHandler := func(ctx context.Context, call chat.ToolCall) (chat.ToolResult, bool, error) {
+	toolHandler := func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
 		switch call.Name {
 		case "custom_database_query":
 			sql := call.Arguments["sql"].(string)
@@ -87,10 +88,10 @@ func ExampleClient_withCustomToolCallback() {
 				"query":   sql,
 				"message": "Query executed successfully",
 			}
-			return chat.ToolResult{Content: result}, true, nil // handled=true
+			return types.ToolResult{Content: result}, true, nil // handled=true
 		default:
 			// Don't handle this tool, fallback to built-in tools
-			return chat.ToolResult{}, false, nil // handled=false, no error
+			return types.ToolResult{}, false, nil // handled=false, no error
 		}
 	}
 
@@ -101,11 +102,11 @@ func ExampleClient_withCustomToolCallback() {
 		return
 	}
 
-	fmt.Printf("Response received with %d messages\n", len(response.Messages))
+	fmt.Printf("Response received: %s\n", response.LastAssistantMsg)
 }
 
-// ExampleCLIHandler demonstrates CLI usage
-func ExampleCLIHandler() {
+// ExampleCliHandler demonstrates CLI usage
+func ExampleCliHandler() {
 	client, err := chat.NewClient(chat.Config{
 		Model: "claude-3-7-sonnet",
 		Token: os.Getenv("ANTHROPIC_API_KEY"),
@@ -122,7 +123,7 @@ func ExampleCLIHandler() {
 		Verbose:    false,
 	})
 
-	err = cliHandler.HandleCLI(context.Background(), "Hello, how are you?",
+	err = cliHandler.HandleCli(context.Background(), "Hello, how are you?",
 		chat.WithTools("file_read"),
 		chat.WithMaxRounds(2),
 	)
@@ -145,16 +146,16 @@ func ExampleClient_multiRound() {
 		return
 	}
 
-	var history []chat.Message
+	var history []types.Message
 
 	// First message
-	response1, err := client.Chat(context.Background(), "My name is Alice",
+	_, err = client.Chat(context.Background(), "My name is Alice",
 		chat.WithHistory(history))
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
-	history = append(history, response1.Messages...)
+	// Note: Response doesn't have Messages field, so we can't append to history in this simple way
 
 	// Follow-up message
 	response2, err := client.Chat(context.Background(), "What is my name?",
@@ -164,5 +165,5 @@ func ExampleClient_multiRound() {
 		return
 	}
 
-	fmt.Printf("Second response: %s\n", response2.Messages[0].Content[:50]+"...")
+	fmt.Printf("Second response: %s\n", response2.LastAssistantMsg[:50]+"...")
 }

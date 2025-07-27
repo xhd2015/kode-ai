@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/xhd2015/kode-ai/tools"
+	"github.com/xhd2015/kode-ai/types"
 )
 
 func TestToolInfoMapping(t *testing.T) {
@@ -133,7 +134,7 @@ func TestParseToolCall(t *testing.T) {
 	}
 }
 
-func TestExecuteToolWithCallback(t *testing.T) {
+func TestToolCallbackWithFallback(t *testing.T) {
 	// Create a mock tool info mapping
 	mapping := make(ToolInfoMapping)
 	mockTool := &ToolInfo{
@@ -147,20 +148,20 @@ func TestExecuteToolWithCallback(t *testing.T) {
 	mapping.AddTool("mock_tool", mockTool)
 
 	// Test with custom callback
-	customCallback := func(ctx context.Context, call ToolCall) (ToolResult, bool, error) {
+	customCallback := func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
 		if call.Name == "custom_tool" {
-			return ToolResult{
+			return types.ToolResult{
 				Content: map[string]interface{}{
 					"result": "custom result",
 				},
 			}, true, nil // handled=true
 		}
 		// Don't handle this tool, fallback to built-in execution
-		return ToolResult{}, false, nil // handled=false
+		return types.ToolResult{}, false, nil // handled=false
 	}
 
 	// Test custom tool execution
-	call := ToolCall{
+	call := types.ToolCall{
 		ID:   "test_id",
 		Name: "custom_tool",
 		Arguments: map[string]interface{}{
@@ -170,7 +171,7 @@ func TestExecuteToolWithCallback(t *testing.T) {
 	}
 
 	client := &Client{}
-	result, err := client.executeToolWithCallback(context.Background(), call, customCallback, nil, "", mapping)
+	result, err := client.executeToolWithCallback(context.Background(), nil, call, customCallback, nil, "", mapping)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -186,13 +187,13 @@ func TestExecuteToolWithCallback(t *testing.T) {
 	}
 
 	// Test fallback to built-in (this will fail since we don't have real built-in tools in test)
-	builtinCall := ToolCall{
+	builtinCall := types.ToolCall{
 		ID:      "builtin_id",
 		Name:    "mock_tool",
 		RawArgs: `{}`,
 	}
 
-	_, err = client.executeToolWithCallback(context.Background(), builtinCall, customCallback, nil, "", mapping)
+	_, err = client.executeToolWithCallback(context.Background(), nil, builtinCall, customCallback, nil, "", mapping)
 	// We expect this to fail since we don't have real tool executors in test
 	if err == nil {
 		t.Logf("Note: builtin tool execution would normally fail in test environment")
@@ -201,7 +202,7 @@ func TestExecuteToolWithCallback(t *testing.T) {
 
 func TestExecuteBuiltinTool(t *testing.T) {
 	// Test with a non-existent tool (should return error)
-	call := ToolCall{
+	call := types.ToolCall{
 		Name:    "non_existent_tool",
 		RawArgs: `{}`,
 	}
@@ -210,7 +211,7 @@ func TestExecuteBuiltinTool(t *testing.T) {
 	if err != nil {
 		t.Errorf("ExecuteBuiltinTool should not return error, but got: %v", err)
 	}
-	if result.Error == nil {
+	if result.Error == "" {
 		t.Errorf("expected result.Error to be set for non-existent tool")
 	}
 }

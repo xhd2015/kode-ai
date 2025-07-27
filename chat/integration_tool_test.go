@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/kode-ai/run/mock_server"
+	"github.com/xhd2015/kode-ai/types"
 )
 
 // startToolMockServer starts a mock server that supports tool calls
@@ -100,19 +101,19 @@ func TestOpenAIToolCallIntegration(t *testing.T) {
 	}
 
 	// Track events
-	var events []Event
-	eventCallback := func(event Event) {
+	var events []types.Message
+	eventCallback := func(event types.Message) {
 		events = append(events, event)
 	}
 
 	// Custom tool callback to handle weather tool
 	toolCalled := false
-	toolCallback := func(ctx context.Context, call ToolCall) (ToolResult, bool, error) {
+	toolCallback := func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
 		toolCalled = true
 
 		if call.Name == "get_weather" {
 			// Return mock weather data for any location
-			return ToolResult{
+			return types.ToolResult{
 				Content: map[string]interface{}{
 					"location":    "San Francisco",
 					"temperature": 22,
@@ -126,7 +127,7 @@ func TestOpenAIToolCallIntegration(t *testing.T) {
 		// Handle any builtin tools that the mock server might call
 		if strings.Contains(call.Name, "list_dir") || strings.Contains(call.Name, "read_file") ||
 			strings.Contains(call.Name, "grep_search") || strings.Contains(call.Name, "batch_read_file") {
-			return ToolResult{
+			return types.ToolResult{
 				Content: map[string]interface{}{
 					"result": "Mock tool execution successful",
 					"tool":   call.Name,
@@ -134,7 +135,7 @@ func TestOpenAIToolCallIntegration(t *testing.T) {
 			}, true, nil
 		}
 
-		return ToolResult{}, false, nil // not handled
+		return types.ToolResult{}, false, nil // not handled
 	}
 
 	// Execute chat with tool calls - the mock server may randomly return tool calls
@@ -153,26 +154,13 @@ func TestOpenAIToolCallIntegration(t *testing.T) {
 		t.Fatal("expected response but got nil")
 	}
 
-	// Check that we got messages
-	if len(response.Messages) == 0 {
-		t.Fatal("expected messages but got none")
-	}
-
-	// Find the assistant message
-	var assistantMessage *Message
-	for _, msg := range response.Messages {
-		if msg.Role == Role_Assistant && msg.Type == MsgType_Msg {
-			assistantMessage = &msg
-			break
-		}
-	}
-
-	if assistantMessage == nil {
-		t.Fatal("expected assistant message but got none")
+	// Check that we got a response
+	if response.LastAssistantMsg == "" {
+		t.Error("expected non-empty response content")
 	}
 
 	// Check that we got a response (content can vary due to random responses)
-	if assistantMessage.Content == "" {
+	if response.LastAssistantMsg == "" {
 		t.Error("expected non-empty response content")
 	}
 
@@ -184,7 +172,7 @@ func TestOpenAIToolCallIntegration(t *testing.T) {
 	// Check for message event
 	hasMessageEvent := false
 	for _, event := range events {
-		if event.Type == EventTypeMessage {
+		if event.Type == types.MsgType_Msg {
 			hasMessageEvent = true
 			break
 		}
@@ -217,12 +205,12 @@ func TestOpenAIToolCallWithBuiltinFallback(t *testing.T) {
 	}
 
 	// Tool callback that handles some tools but not others
-	toolCallback := func(ctx context.Context, call ToolCall) (ToolResult, bool, error) {
+	toolCallback := func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
 		if call.Name == "custom_tool" {
-			return ToolResult{Content: "handled"}, true, nil
+			return types.ToolResult{Content: "handled"}, true, nil
 		}
 		// Don't handle other tools, let them fallback to built-in or fail gracefully
-		return ToolResult{}, false, nil // not handled
+		return types.ToolResult{}, false, nil // not handled
 	}
 
 	// This should work with the mock server, which may or may not return tool calls
@@ -253,20 +241,20 @@ func TestOpenAIMultipleToolCalls(t *testing.T) {
 
 	// Track which tools were called
 	toolsCalled := make(map[string]bool)
-	toolCallback := func(ctx context.Context, call ToolCall) (ToolResult, bool, error) {
+	toolCallback := func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
 		toolsCalled[call.Name] = true
 
 		// Handle common tool names that might be returned by mock server
 		switch call.Name {
 		case "get_weather":
-			return ToolResult{
+			return types.ToolResult{
 				Content: map[string]interface{}{
 					"temperature": 18,
 					"condition":   "cloudy",
 				},
 			}, true, nil
 		case "get_time":
-			return ToolResult{
+			return types.ToolResult{
 				Content: map[string]interface{}{
 					"time":     "14:30:00",
 					"timezone": "EST",
@@ -274,7 +262,7 @@ func TestOpenAIMultipleToolCalls(t *testing.T) {
 			}, true, nil
 		default:
 			// Handle any other tools the mock server might return
-			return ToolResult{
+			return types.ToolResult{
 				Content: map[string]interface{}{
 					"result": "Mock execution successful",
 					"tool":   call.Name,
@@ -311,14 +299,14 @@ func TestOpenAIToolCallErrorHandling(t *testing.T) {
 	}
 
 	// Tool callback that returns an error for specific tools
-	toolCallback := func(ctx context.Context, call ToolCall) (ToolResult, bool, error) {
+	toolCallback := func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
 		if call.Name == "failing_tool" {
-			return ToolResult{
-				Error: fmt.Errorf("tool execution failed"),
+			return types.ToolResult{
+				Error: "tool execution failed",
 			}, true, fmt.Errorf("simulated tool error")
 		}
 		// Handle other tools normally
-		return ToolResult{
+		return types.ToolResult{
 			Content: map[string]interface{}{
 				"result": "Success",
 			},
