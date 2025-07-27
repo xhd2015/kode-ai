@@ -80,12 +80,25 @@ var upgrader = websocket.Upgrader{
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Verbose {
+		log.Printf("WebSocket connection request from %s", r.RemoteAddr)
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if s.opts.Verbose {
+			log.Printf("Closing WebSocket connection from %s", r.RemoteAddr)
+		}
+		conn.Close()
+	}()
+
+	if s.opts.Verbose {
+		log.Printf("WebSocket connection established with %s", r.RemoteAddr)
+	}
 
 	// Check for wait_for_stream_events query parameter
 	waitForStreamEvents := false
@@ -103,12 +116,22 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	systemPrompt := r.URL.Query().Get("system_prompt")
 
+	if s.opts.Verbose {
+		log.Printf("Request parameters: waitForStreamEvents=%t, model=%s, baseURL=%s, hasToken=%t, messageLen=%d, systemPromptLen=%d",
+			waitForStreamEvents, model, baseURL, token != "", len(msg), len(systemPrompt))
+	}
+
 	ctx := context.Background()
 
 	// Create WebSocket-based stream reader
 	wsReader := NewWebSocketReader(conn)
+	wsReader.verbose = s.opts.Verbose
 	wsReader.Start()
 	defer wsReader.Close()
+
+	if s.opts.Verbose {
+		log.Printf("WebSocket reader started for %s", r.RemoteAddr)
+	}
 
 	// Add WebSocket stream support
 	req := types.Request{
@@ -121,6 +144,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// If waiting for stream events, load initial events
 	if waitForStreamEvents {
+		if s.opts.Verbose {
+			log.Printf("Loading initial events from WebSocket for %s", r.RemoteAddr)
+		}
 		messages, err := s.loadInitialEventsFromWebSocket(ctx, wsReader, &req, 30*time.Second)
 		if err != nil {
 			log.Printf("Failed to load initial events: %v", err)
@@ -128,17 +154,27 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.History = s.convertMessagesToHistory(messages)
+		if s.opts.Verbose {
+			log.Printf("Loaded %d initial events, converted to %d history messages for %s", len(messages), len(req.History), r.RemoteAddr)
+		}
 	}
 
 	req.StreamPair = &types.StreamPair{
 		Input:  wsReader,
-		Output: NewWebSocketWriter(conn),
+		Output: NewWebSocketWriter(conn, s.opts.Verbose),
 	}
 	req.EventCallback = func(event types.Message) {
 		event = event.TimeFilled()
+		if s.opts.Verbose {
+			log.Printf("Sending event to %s: type=%s, role=%s, contentLen=%d", r.RemoteAddr, event.Type, event.Role, len(event.Content))
+		}
 		if err := conn.WriteJSON(event); err != nil {
 			log.Printf("Failed to send event: %v", err)
 		}
+	}
+
+	if s.opts.Verbose {
+		log.Printf("Starting chat execution for %s", r.RemoteAddr)
 	}
 
 	// Execute chat
@@ -149,13 +185,25 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.opts.Verbose {
+		log.Printf("Chat execution completed successfully for %s", r.RemoteAddr)
+	}
+
 	// Send stream end event to signal completion
 	endEvent := types.Message{
 		Type: types.MsgType_StreamEnd,
 	}.TimeFilled()
 
+	if s.opts.Verbose {
+		log.Printf("Sending stream end event to %s", r.RemoteAddr)
+	}
+
 	if err := conn.WriteJSON(endEvent); err != nil {
 		log.Printf("Failed to send stream end event: %v", err)
+	}
+
+	if s.opts.Verbose {
+		log.Printf("Sending close message to %s", r.RemoteAddr)
 	}
 
 	// Close the connection gracefully
@@ -163,15 +211,25 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Verbose {
+		log.Printf("Shutdown request received from %s", r.RemoteAddr)
+	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Shutting down...\n"))
 	go func() {
 		time.Sleep(200 * time.Millisecond)
+		if s.opts.Verbose {
+			log.Printf("Initiating server shutdown")
+		}
 		s.Shutdown(r.Context())
 	}()
 }
 
 func (s *Server) sendError(conn *websocket.Conn, errorMsg string) {
+	if s.opts.Verbose {
+		log.Printf("Sending error message: %s", errorMsg)
+	}
+
 	errorEvent := types.Message{
 		Type:    types.MsgType_Error,
 		Content: errorMsg,
@@ -189,9 +247,16 @@ func (s *Server) loadInitialEventsFromWebSocket(ctx context.Context, reader *Web
 
 	var messages []types.Message
 
+	if s.opts.Verbose {
+		log.Printf("Loading initial events with timeout %v", timeout)
+	}
+
 	for {
 		select {
 		case msg := <-reader.MessageChan():
+			if s.opts.Verbose {
+				log.Printf("Received initial event: type=%s, contentLen=%d", msg.Type, len(msg.Content))
+			}
 			switch msg.Type {
 			case types.MsgType_StreamInitRequest:
 				var initReq types.Request
@@ -199,7 +264,13 @@ func (s *Server) loadInitialEventsFromWebSocket(ctx context.Context, reader *Web
 					return nil, fmt.Errorf("failed to unmarshal init request: %v", err)
 				}
 				*req = initReq
+				if s.opts.Verbose {
+					log.Printf("Processed stream init request: model=%s, maxRounds=%d, toolsCount=%d", req.Model, req.MaxRounds, len(req.ToolDefinitions))
+				}
 			case types.MsgType_StreamInitEventsFinished:
+				if s.opts.Verbose {
+					log.Printf("Initial events loading finished, collected %d messages", len(messages))
+				}
 				return messages, nil
 			default:
 				messages = append(messages, msg)
@@ -217,6 +288,9 @@ func (s *Server) convertMessagesToHistory(messages []types.Message) []types.Mess
 			history = append(history, msg)
 		}
 	}
+	if s.opts.Verbose {
+		log.Printf("Converted %d messages to %d history messages", len(messages), len(history))
+	}
 	return history
 }
 
@@ -227,6 +301,7 @@ type WebSocketReader struct {
 	msgChan  chan types.Message
 	done     chan struct{}
 	mutex    sync.RWMutex
+	verbose  bool
 }
 
 // NewWebSocketReader creates a new WebSocket reader
@@ -252,9 +327,15 @@ func (wr *WebSocketReader) MessageChan() <-chan types.Message {
 }
 
 func (wr *WebSocketReader) readLoop() {
+	if wr.verbose {
+		log.Printf("WebSocket reader loop started")
+	}
 	for {
 		select {
 		case <-wr.done:
+			if wr.verbose {
+				log.Printf("WebSocket reader loop stopping")
+			}
 			return
 		default:
 			var msg types.Message
@@ -262,8 +343,14 @@ func (wr *WebSocketReader) readLoop() {
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					log.Printf("WebSocket error: %v", err)
+				} else if wr.verbose {
+					log.Printf("WebSocket read ended: %v", err)
 				}
 				return
+			}
+
+			if wr.verbose {
+				log.Printf("WebSocket received message: type=%s, streamID=%s, contentLen=%d", msg.Type, msg.StreamID, len(msg.Content))
 			}
 
 			// Send to general message channel
@@ -280,11 +367,16 @@ func (wr *WebSocketReader) readLoop() {
 				wr.mutex.RUnlock()
 
 				if exists {
+					if wr.verbose {
+						log.Printf("Forwarding message to stream channel: streamID=%s", msg.StreamID)
+					}
 					select {
 					case ch <- msg:
 					case <-wr.done:
 						return
 					}
+				} else if wr.verbose {
+					log.Printf("No channel found for streamID: %s", msg.StreamID)
 				}
 			}
 		}
@@ -297,6 +389,9 @@ func (wr *WebSocketReader) Subscribe(id string) chan types.Message {
 
 	ch := make(chan types.Message, 10)
 	wr.channels[id] = ch
+	if wr.verbose {
+		log.Printf("Subscribed to stream channel: streamID=%s", id)
+	}
 	return ch
 }
 
@@ -307,6 +402,11 @@ func (wr *WebSocketReader) Unsubscribe(id string) {
 	if ch, exists := wr.channels[id]; exists {
 		close(ch)
 		delete(wr.channels, id)
+		if wr.verbose {
+			log.Printf("Unsubscribed from stream channel: streamID=%s", id)
+		}
+	} else if wr.verbose {
+		log.Printf("Attempted to unsubscribe from non-existent stream channel: streamID=%s", id)
 	}
 }
 
@@ -333,16 +433,23 @@ func (wr *WebSocketReader) Read(p []byte) (n int, err error) {
 
 // WebSocketWriter implements io.Writer for WebSocket connections
 type WebSocketWriter struct {
-	conn *websocket.Conn
+	conn    *websocket.Conn
+	verbose bool
 }
 
-func NewWebSocketWriter(conn *websocket.Conn) *WebSocketWriter {
-	return &WebSocketWriter{conn: conn}
+func NewWebSocketWriter(conn *websocket.Conn, verbose bool) *WebSocketWriter {
+	return &WebSocketWriter{conn: conn, verbose: verbose}
 }
 
 func (ww *WebSocketWriter) Write(p []byte) (n int, err error) {
+	if ww.verbose {
+		log.Printf("WebSocket writer sending %d bytes", len(p))
+	}
 	err = ww.conn.WriteMessage(websocket.TextMessage, p)
 	if err != nil {
+		if ww.verbose {
+			log.Printf("WebSocket write failed: %v", err)
+		}
 		return 0, err
 	}
 	return len(p), nil

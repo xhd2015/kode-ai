@@ -163,6 +163,124 @@ func TestIntegration_ServerWithTools(t *testing.T) {
 	t.Logf("Integration test with tools completed. Response: %s", response.LastAssistantMsg)
 }
 
+// TestIntegration_ServerWithSleepTool tests tool functionality with a long-running sleep tool
+func TestIntegration_ServerWithSleepTool(t *testing.T) {
+	if os.Getenv("TEST_INTEGRATION") != "true" {
+		t.Skip("Integration tests skipped. Set TEST_INTEGRATION=true to run.")
+	}
+
+	// Start the server with tools - ENABLE VERBOSE LOGGING
+	port := findFreePort(t)
+	serverOpts := server.ServerOptions{
+		Verbose: true, // Enable verbose logging to see channel management
+	}
+
+	// Start server in background
+	go func() {
+		server.Start(port, serverOpts)
+	}()
+
+	// Wait for server to start
+	time.Sleep(500 * time.Millisecond)
+
+	// Test with sleep tool callback - use longer timeout to accommodate 2min sleep
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second) // 3 minutes timeout
+	defer cancel()
+
+	serverURL := fmt.Sprintf("http://localhost:%d", port)
+
+	var receivedEvents []types.Message
+	toolCallReceived := false
+	toolResultReceived := false
+
+	req := types.Request{
+		Message:        "Please sleep for 2 minutes",
+		SystemPrompt:   "You are a helpful assistant. When asked to sleep, use the sleep_tool.",
+		MaxRounds:      2, // Changed from default 1 to 2 to see what happens
+		DefaultToolCwd: ".",
+		Model:          "gpt-4o-mini",
+		Token:          "mock-token",            // Mock server doesn't validate tokens
+		BaseURL:        "http://localhost:8080", // Use mock server
+		ToolDefinitions: []*types.UnifiedTool{
+			{
+				Name:        "sleep_tool",
+				Description: "A tool that sleeps for a specified number of seconds",
+				Parameters: &jsonschema.JsonSchema{
+					Type: "object",
+					Properties: map[string]*jsonschema.JsonSchema{
+						"seconds": {
+							Type: "integer",
+						},
+					},
+				},
+			},
+		},
+		EventCallback: func(event types.Message) {
+			receivedEvents = append(receivedEvents, event)
+			logMsg(t, event)
+
+			if event.Type == types.MsgType_ToolCall {
+				toolCallReceived = true
+			}
+			if event.Type == types.MsgType_ToolResult {
+				toolResultReceived = true
+			}
+		},
+		ToolCallback: func(ctx context.Context, stream types.StreamContext, call types.ToolCall) (types.ToolResult, bool, error) {
+			t.Logf("Tool callback called: %s with args: %v", call.Name, call.Arguments)
+
+			if call.Name == "sleep_tool" {
+				// Extract seconds from arguments - default to 2 minutes (120 seconds)
+				seconds := 120 // default 2 minutes
+				if secsVal, ok := call.Arguments["seconds"]; ok {
+					if secsInt, ok := secsVal.(float64); ok {
+						seconds = int(secsInt)
+					}
+				}
+
+				t.Logf("Sleeping for %d seconds (%d minutes)...", seconds, seconds/60)
+				time.Sleep(time.Duration(seconds) * time.Second)
+				t.Logf("Sleep completed after %d seconds (%d minutes)", seconds, seconds/60)
+
+				return types.ToolResult{
+					Content: fmt.Sprintf("Slept for %d seconds (%d minutes)", seconds, seconds/60),
+				}, true, nil
+			}
+
+			// Let other tools be handled by built-in handlers
+			return types.ToolResult{}, false, nil
+		},
+	}
+
+	startTime := time.Now()
+	_, err := cli.ChatWithServer(ctx, serverURL, req)
+	duration := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("ChatWithServer with sleep tool failed: %v", err)
+	}
+
+	// Verify tool call and result were received
+	if !toolCallReceived {
+		t.Error("Expected to receive a tool call event")
+	}
+	if !toolResultReceived {
+		t.Error("Expected to receive a tool result event")
+	}
+
+	// Verify the call took at least 2 minutes (with some tolerance)
+	if duration < 119*time.Second {
+		t.Errorf("Expected call to take at least 2 minutes (120 seconds), but took %v", duration)
+	}
+
+	// Verify no errors occurred
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	t.Logf("Sleep tool integration test completed successfully in %v. Tool call and result received.", duration)
+}
+
 // TestIntegration_ServerWithHistory tests history functionality
 func TestIntegration_ServerWithHistory(t *testing.T) {
 	if os.Getenv("TEST_INTEGRATION") != "true" {
@@ -299,6 +417,51 @@ func TestIntegration_ServerMultipleRounds(t *testing.T) {
 	}
 
 	t.Logf("Multiple rounds integration test completed after %d rounds. Final response: %s", roundCount, response.LastAssistantMsg)
+}
+
+// TestIntegration_ServerVerboseLogging tests the verbose logging functionality
+func TestIntegration_ServerVerboseLogging(t *testing.T) {
+	if os.Getenv("TEST_INTEGRATION") != "true" {
+		t.Skip("Integration tests skipped. Set TEST_INTEGRATION=true to run.")
+	}
+
+	// Start the server with verbose logging enabled
+	port := findFreePort(t)
+	serverOpts := server.ServerOptions{
+		Verbose: true, // Enable verbose logging
+	}
+
+	// Start server in background
+	go func() {
+		server.Start(port, serverOpts)
+	}()
+
+	// Wait for server to start
+	time.Sleep(500 * time.Millisecond)
+
+	// Test basic communication with verbose logging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	serverURL := fmt.Sprintf("http://localhost:%d", port)
+
+	req := types.Request{
+		Message:      "Hello server with verbose logging",
+		SystemPrompt: "You are a helpful assistant.",
+		Model:        "gpt-4o-mini",
+		Token:        "mock-token",
+		BaseURL:      "http://localhost:8080",
+		EventCallback: func(event types.Message) {
+			logMsg(t, event)
+		},
+	}
+
+	_, err := cli.ChatWithServer(ctx, serverURL, req)
+	if err != nil {
+		t.Fatalf("ChatWithServer with verbose logging failed: %v", err)
+	}
+
+	t.Logf("Verbose logging test completed successfully")
 }
 
 func findFreePort(t *testing.T) int {

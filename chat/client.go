@@ -264,7 +264,12 @@ func (c *Client) ChatRequest(ctx context.Context, req types.Request) (*types.Res
 
 	// Initialize stdin reader if streams are provided
 	if req.StreamPair != nil {
-		c.stdinReader = types.NewStdinReader(req.StreamPair.Input)
+		// Check if the input is already a StdinReader (e.g., WebSocket reader)
+		if stdinReader, ok := req.StreamPair.Input.(types.StdinReader); ok {
+			c.stdinReader = stdinReader
+		} else {
+			c.stdinReader = types.NewStdinReader(req.StreamPair.Input)
+		}
 	}
 
 	for round := 0; round < maxRounds; round++ {

@@ -5,7 +5,7 @@ go 1.24
 require (
 	github.com/xhd2015/kode-ai v0.0.0-00010101000000-000000000000
 	github.com/xhd2015/kode-ai/cli v0.0.0-00010101000000-000000000000
-	github.com/xhd2015/kode-ai/types v0.0.2
+	github.com/xhd2015/kode-ai/types v0.0.3
 	github.com/xhd2015/llm-tools v0.0.17
 )
 
