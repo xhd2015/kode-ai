@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/xhd2015/kode-ai/types"
@@ -15,22 +16,26 @@ import (
 type serverSession struct {
 	stream        types.StreamContext
 	eventCallback types.EventCallback
-	logger        types.Logger
+
+	eventBuf chan types.Message
+
+	logger types.Logger
 
 	lastAssistantMsg string
 }
 
 // ChatWithServer connects to a WebSocket chat server and streams events until finished
 func ChatWithServer(ctx context.Context, server string, req types.Request) (*types.Response, error) {
-	sess := &serverSession{}
+	sess := &serverSession{
+		eventCallback: req.EventCallback,
+		logger:        getLogger(req.Logger),
+		eventBuf:      make(chan types.Message, 10),
+	}
 	return sess.chatWithServer(ctx, server, req)
 }
 
 // chatWithServer connects to a WebSocket server and handles the streaming protocol
 func (c *serverSession) chatWithServer(ctx context.Context, server string, req types.Request) (*types.Response, error) {
-	c.eventCallback = req.EventCallback
-	c.logger = getLogger(req.Logger)
-
 	// Parse server URL and build WebSocket URL
 	serverURL, err := url.Parse(server)
 	if err != nil {
@@ -54,13 +59,20 @@ func (c *serverSession) chatWithServer(ctx context.Context, server string, req t
 	query.Set("wait_for_stream_events", "true")
 	wsURL.RawQuery = query.Encode()
 
-	// Connect to WebSocket
-	dialer := websocket.Dialer{}
+	// Connect to WebSocket with handshake timeout
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 30 * time.Second,
+	}
 	conn, _, err := dialer.DialContext(ctx, wsURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to WebSocket server: %w", err)
 	}
 	defer conn.Close()
+
+	// Set up ping/pong handler for connection health
+	conn.SetPongHandler(func(string) error {
+		return nil
+	})
 
 	c.stream = &websocketStreamContext{conn: conn}
 
@@ -91,6 +103,10 @@ func (c *serverSession) chatWithServer(ctx context.Context, server string, req t
 }
 
 // writeEvent writes an event and calls the event callback
+func (c *serverSession) writeEventBuf(msg types.Message) {
+	c.eventBuf <- msg
+}
+
 func (c *serverSession) writeEvent(msg types.Message) error {
 	// Call event callback first
 	if c.eventCallback != nil {
@@ -108,20 +124,63 @@ func (c *serverSession) writeEvent(msg types.Message) error {
 func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *websocket.Conn, toolCallback types.ToolCallback, followUpCallback types.FollowUpCallback, toolDefs []*types.UnifiedTool) (*types.Response, error) {
 	var response types.Response
 
+	// ping every 10s
+	pingTicker := time.NewTicker(10 * time.Second)
+	defer pingTicker.Stop()
+
+	msgChan := make(chan types.Message)
+	errChan := make(chan error)
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		defer close(msgChan)
+		defer close(errChan)
+		for {
+			var msg types.Message
+			err := conn.ReadJSON(&msg)
+			if err != nil {
+				select {
+				case errChan <- err:
+				case <-done:
+				}
+				return
+			}
+			select {
+			case msgChan <- msg:
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	for {
+		var msg types.Message
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		default:
-		}
-
-		var msg types.Message
-		err := conn.ReadJSON(&msg)
-		if err != nil {
+		case msg := <-c.eventBuf:
+			err := c.writeEvent(msg)
+			if err != nil {
+				c.logger.Log(ctx, types.LogType_Error, "failed to write event: %v\n", err)
+				return nil, fmt.Errorf("failed to write event: %w", err)
+			}
+			continue
+		case <-pingTicker.C:
+			err := conn.WriteMessage(websocket.PingMessage, nil)
+			if err != nil {
+				c.logger.Log(ctx, types.LogType_Error, "failed to ping: %v\n", err)
+			}
+			continue
+		case err := <-errChan:
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				break // Normal close
 			}
 			return nil, fmt.Errorf("failed to read WebSocket message: %w", err)
+		case msg = <-msgChan:
+			// handled below
+		default:
+			continue
 		}
 
 		if msg.Type == types.MsgType_Msg && msg.Role == types.Role_Assistant {
@@ -155,7 +214,14 @@ func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *webs
 					foundToolCallback = toolCallback
 				}
 				if foundToolCallback != nil {
-					c.handleSingleToolCallback(ctx, msg, foundToolCallback)
+					err := c.stream.ACK(msg.StreamID)
+					if err != nil {
+						c.logger.Log(ctx, types.LogType_Error, "failed to ack stream: %v\n", err)
+						continue
+					}
+					// start a new goroutine to handle the tool callback
+					// so that it won't block the main loop
+					go c.handleSingleToolCallbackAsync(ctx, msg.StreamID, msg, foundToolCallback)
 					continue
 				}
 				unableToHandle = true
@@ -167,27 +233,33 @@ func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *webs
 						c.logger.Log(ctx, types.LogType_Error, "failed to ack stream: %v\n", err)
 						continue
 					}
-					followUpResult, err := followUpCallback(ctx)
-					if err != nil {
-						c.writeEvent(types.Message{
-							Type:     types.MsgType_Error,
-							StreamID: msg.StreamID,
-							Error:    err.Error(),
-						})
-						continue
-					}
-					if followUpResult != nil {
-						fmsg := *followUpResult
-						if fmsg.Type == "" {
-							fmsg.Type = types.MsgType_Msg
+					go func() {
+						followUpResult, err := followUpCallback(ctx)
+						if err != nil {
+							c.writeEventBuf(types.Message{
+								Type:     types.MsgType_Error,
+								StreamID: msg.StreamID,
+								Error:    err.Error(),
+							})
 						}
-						if fmsg.Role == "" {
-							fmsg.Role = types.Role_User
+						if followUpResult != nil {
+							fmsg := *followUpResult
+							if fmsg.Type == "" {
+								fmsg.Type = types.MsgType_Msg
+							}
+							if fmsg.Role == "" {
+								fmsg.Role = types.Role_User
+							}
+							fmsg.StreamID = msg.StreamID
+							c.writeEventBuf(fmsg)
+						} else {
+							c.writeEventBuf(types.Message{
+								Type:     types.MsgType_StreamEnd,
+								StreamID: msg.StreamID,
+							})
 						}
-						fmsg.StreamID = msg.StreamID
-						c.writeEvent(fmsg)
-						continue
-					}
+					}()
+					continue
 				}
 				unableToHandle = true
 			case types.MsgType_Error:
@@ -217,22 +289,26 @@ func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *webs
 	return &response, nil
 }
 
-// handleSingleToolCallback handles a single tool callback request using the WebSocket stream protocol
-func (c *serverSession) handleSingleToolCallback(ctx context.Context, toolCallRequest types.Message, toolCallback types.ToolCallback) {
-	if c.stream == nil {
-		return
-	}
-	streamID := toolCallRequest.StreamID
-	if streamID == "" || toolCallRequest.ToolName == "" {
-		return
-	}
-
-	// ack
-	err := c.stream.ACK(streamID)
-	if err != nil {
-		c.logger.Log(ctx, types.LogType_Error, "failed to ack stream: %v\n", err)
-		return
-	}
+// handleSingleToolCallbackAsync handles a single tool callback request using the WebSocket stream protocol
+func (c *serverSession) handleSingleToolCallbackAsync(ctx context.Context, streamID string, toolCallRequest types.Message, toolCallback types.ToolCallback) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Log(ctx, types.LogType_Error, "panic in handleSingleToolCallbackAsync: %v\n", r)
+			response := types.Message{
+				Type:     types.MsgType_StreamResponseTool,
+				StreamID: streamID,
+				ToolName: toolCallRequest.ToolName,
+				Content:  "panic in handleSingleToolCallbackAsync",
+				Error:    fmt.Sprintf("%v", r),
+				Metadata: types.Metadata{
+					StreamResponseTool: &types.StreamResponseToolMetadata{
+						OK: true,
+					},
+				},
+			}
+			c.writeEventBuf(response)
+		}
+	}()
 
 	argsJSON := toolCallRequest.Content
 	var args map[string]interface{}
@@ -299,11 +375,7 @@ func (c *serverSession) handleSingleToolCallback(ctx context.Context, toolCallRe
 			},
 		},
 	}
-
-	err = c.writeEvent(response)
-	if err != nil {
-		c.logger.Log(ctx, types.LogType_Error, "failed to write response: %v\n", err)
-	}
+	c.writeEventBuf(response)
 }
 
 // websocketStreamContext implements types.StreamContext for WebSocket connections
