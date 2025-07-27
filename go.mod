@@ -6,6 +6,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.5.0
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/mark3labs/mcp-go v0.33.0
 	github.com/openai/openai-go v1.8.3
 	github.com/shopspring/decimal v1.4.0
@@ -37,7 +38,6 @@ require (
 	github.com/google/s2a-go v0.1.8 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
@@ -64,3 +64,5 @@ require (
 	google.golang.org/grpc v1.66.2 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
+
+replace github.com/xhd2015/kode-ai/types => /Users/xhd2015/Projects/xhd2015/kode-ai/types

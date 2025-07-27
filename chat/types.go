@@ -22,6 +22,8 @@ type Config struct {
 	BaseURL  string             // Optional: Custom API base URL
 	Provider providers.Provider // Optional: Auto-detected from model if not specified
 	LogLevel types.LogLevel     // Optional: None, Request, Response, Debug
+
+	Logger types.Logger
 }
 
 // Provider-specific message unions for internal use

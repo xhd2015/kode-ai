@@ -33,6 +33,7 @@ Usage: kode <cmd> [OPTIONS]
 
 Available commands:
   chat <msg>                      chat with llm, msg can contain @file(path/to/file) directive
+  chat-server                     start a WebSocket chat server
   view <files...>                 view recorded chat files
   mock-server                     start a mock HTTP server for integration testing
   example                         show examples
@@ -119,6 +120,8 @@ func Main(args []string, opts Options) error {
 	switch cmd {
 	case "chat":
 		return handleChat(cmd, args, opts.BaseCmd, opts.DefaultBaseURL)
+	case "chat-server":
+		return handleChatServer(args)
 	case "view":
 		return handleView(args)
 	case "mock-server":

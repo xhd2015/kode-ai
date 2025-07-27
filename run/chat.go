@@ -36,6 +36,39 @@ type ChatOptions struct {
 	mcpServers []string
 }
 
+// Getter methods for ChatOptions to allow external access
+func (c ChatOptions) SystemPrompt() string {
+	return c.systemPrompt
+}
+
+func (c ChatOptions) MaxRound() int {
+	return c.maxRound
+}
+
+func (c ChatOptions) ToolBuiltins() []string {
+	return c.toolBuiltins
+}
+
+func (c ChatOptions) ToolFiles() []string {
+	return c.toolFiles
+}
+
+func (c ChatOptions) ToolJSONs() []string {
+	return c.toolJSONs
+}
+
+func (c ChatOptions) ToolDefaultCwd() string {
+	return c.toolDefaultCwd
+}
+
+func (c ChatOptions) NoCache() bool {
+	return c.noCache
+}
+
+func (c ChatOptions) MCPServers() []string {
+	return c.mcpServers
+}
+
 type ChatHandler struct {
 	APIShape providers.APIShape
 

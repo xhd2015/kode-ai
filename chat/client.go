@@ -35,6 +35,7 @@ type Client struct {
 	apiShape providers.APIShape
 
 	stdinReader types.StdinReader
+	logger      types.Logger
 }
 
 // NewClient creates a new chat client
@@ -52,9 +53,17 @@ func NewClient(config Config) (*Client, error) {
 		return nil, fmt.Errorf("determine API shape: %w", err)
 	}
 
+	logger := config.Logger
+	if logger == nil {
+		logger = types.LoggerFunc(func(ctx context.Context, logType types.LogType, format string, args ...interface{}) {
+			// silent
+		})
+	}
+
 	return &Client{
 		config:   config,
 		apiShape: apiShape,
+		logger:   logger,
 	}, nil
 }
 
