@@ -51,6 +51,7 @@ const (
 	MsgType_StreamEnd            MsgType = "stream_end" // cannot handle message
 
 	// for initial stream
+	MsgType_StreamInitRequest        MsgType = "stream_init_request"
 	MsgType_StreamInitEventsFinished MsgType = "stream_init_events_finished"
 )
 

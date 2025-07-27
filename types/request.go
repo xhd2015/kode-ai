@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"io"
+	"log"
 )
 
 // Request represents a chat request
@@ -71,4 +72,10 @@ type LoggerFunc func(ctx context.Context, logType LogType, format string, args .
 
 func (l LoggerFunc) Log(ctx context.Context, logType LogType, format string, args ...interface{}) {
 	l(ctx, logType, format, args...)
+}
+
+type StdLogger struct{}
+
+func (l StdLogger) Log(ctx context.Context, logType LogType, format string, args ...interface{}) {
+	log.Printf("["+string(logType)+"] "+format, args...)
 }
