@@ -15,6 +15,7 @@ var builtinToolNames = []string{
 	"grep_search",
 	"create_file_with_content",
 	"read_file",
+	"write_file",
 	"rename_file",
 	"delete_file",
 	"search_replace",
@@ -53,6 +54,8 @@ func GetRandomToolArgsForTool(toolName string) string {
 		return `{"target_file": "new_file.txt", "content": "Hello World"}`
 	case "read_file":
 		return `{"target_file": "example.txt", "should_read_entire_file": true}`
+	case "write_file":
+		return `{"target_file": "example.txt", "content": "Hello World"}`
 	case "rename_file":
 		return `{"old_path": "old_file.txt", "new_path": "new_file.txt"}`
 	case "delete_file":

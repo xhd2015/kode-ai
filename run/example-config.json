@@ -1,9 +1,11 @@
 {
     "model": "claude-3-7-sonnet",
-    "max_round": 5,
+    "max_round": 40,
     "tools": [
         "list_dir",
-        "read_file"
+        "read_file",
+        "write_file",
+        "run_terminal_command"
     ],
     "system": [
         "You are a helpful assistant that can answer questions and help with tasks."

@@ -63,6 +63,7 @@ Options:
   --json                          output response as JSON
   --std-stream                    enable bidirectional tool callback communication via stdin/stdout
   -c,--config FILE                load configuration from JSON file
+  --config-example                show example of config file	
   -v,--verbose                    show verbose info
 
 Examples:
@@ -182,6 +183,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var verbose bool
 	var mcpServers []string
 	var configFile string
+	var configExample bool
 	var jsonOutput bool
 	var stdStream bool
 	var waitForStreamEvents bool
@@ -204,6 +206,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		Bool("-v,--verbose", &verbose).
 		StringSlice("--mcp", &mcpServers).
 		String("-c,--config", &configFile).
+		Bool("--config-example", &configExample).
 		Bool("--json", &jsonOutput).
 		Bool("--std-stream", &stdStream).
 		Bool("--wait-for-stream-events", &waitForStreamEvents).
@@ -212,6 +215,11 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	args, err = flagsParser.Parse(args)
 	if err != nil {
 		return err
+	}
+
+	if configExample {
+		fmt.Println(ExampleConfig)
+		return nil
 	}
 
 	if stdStream && jsonOutput {

@@ -19,6 +19,7 @@ import (
 	"github.com/xhd2015/llm-tools/tools/send_answer"
 	"github.com/xhd2015/llm-tools/tools/todo_write"
 	"github.com/xhd2015/llm-tools/tools/tree"
+	"github.com/xhd2015/llm-tools/tools/write_file"
 
 	// "github.com/xhd2015/llm-tools/tools/tree"
 	"github.com/xhd2015/llm-tools/tools/web_search"
@@ -66,6 +67,11 @@ var tools = []*ExecutorInfo{
 		Name:       "read_file",
 		Definition: read_file.GetToolDefinition(),
 		Executor:   ReadFileExecutor{},
+	},
+	{
+		Name:       "write_file",
+		Definition: write_file.GetToolDefinition(),
+		Executor:   WriteFileExecutor{},
 	},
 	{
 		Name:       "rename_file",
@@ -271,6 +277,20 @@ func (e ReadFileExecutor) Execute(arguments string, opts ExecuteOptions) (interf
 		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
 	}
 	return read_file.ReadFile(req)
+}
+
+type WriteFileExecutor struct {
+}
+
+func (e WriteFileExecutor) Execute(arguments string, opts ExecuteOptions) (interface{}, error) {
+	req, err := write_file.ParseJSONRequest(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("parse args: %v", err)
+	}
+	if req.WorkspaceRoot == "" && opts.DefaultWorkspaceRoot != "" {
+		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
+	}
+	return write_file.WriteFile(req)
 }
 
 type SearchReplaceExecutor struct {

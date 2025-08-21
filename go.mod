@@ -11,9 +11,9 @@ require (
 	github.com/openai/openai-go v1.8.3
 	github.com/shopspring/decimal v1.4.0
 	github.com/xhd2015/go-var-template v0.0.4
-	github.com/xhd2015/kode-ai/types v0.0.2
+	github.com/xhd2015/kode-ai/types v0.0.3
 	github.com/xhd2015/less-gen v0.0.18
-	github.com/xhd2015/llm-tools v0.0.17
+	github.com/xhd2015/llm-tools v0.0.18
 	github.com/xhd2015/xgo v1.0.49-0.20240916074001-40aa40fc7623
 	golang.org/x/term v0.32.0
 	google.golang.org/genai v1.15.0
@@ -65,4 +65,4 @@ require (
 	google.golang.org/protobuf v1.34.2 // indirect
 )
 
-replace github.com/xhd2015/kode-ai/types => /Users/xhd2015/Projects/xhd2015/kode-ai/types
+// replace github.com/xhd2015/kode-ai/types => /Users/xhd2015/Projects/xhd2015/kode-ai/types
