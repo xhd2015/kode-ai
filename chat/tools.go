@@ -1,13 +1,16 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os/exec"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/xhd2015/kode-ai/chat/strinterplot"
 	"github.com/xhd2015/kode-ai/internal/jsondecode"
 	"github.com/xhd2015/kode-ai/tools"
 	"github.com/xhd2015/kode-ai/types"
@@ -106,8 +109,12 @@ func executeTool(ctx context.Context, toolName string, arguments string, default
 			if err := jsondecode.UnmarshalSafe([]byte(arguments), &m); err != nil {
 				return fmt.Sprintf("parse args %s: %v", toolName, err), true
 			}
-			// This would need the command execution logic from run/tools.go
-			return fmt.Sprintf("Custom command tools not yet implemented: %s", toolName), true
+			// execute the command
+			strRes, err := executeCommand(ctx, toolInfo.ToolDefinition.Command, m)
+			if err != nil {
+				return fmt.Sprintf("execute command %s: %v", toolName, err), true
+			}
+			return strRes, true
 		} else {
 			// Handle function-based tools
 			return fmt.Sprintf("Custom command unable to execute: %s", toolName), false
@@ -121,6 +128,21 @@ func executeTool(ctx context.Context, toolName string, arguments string, default
 		return fmt.Sprintf("marshalling result %s: %v", toolName, err), true
 	}
 	return string(jsonRes), true
+}
+
+func executeCommand(ctx context.Context, command []string, args map[string]any) (string, error) {
+	command, err := strinterplot.InterplotList(command, args)
+	if err != nil {
+		return "", fmt.Errorf("interplot command %s: %v", command, err)
+	}
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("execute command %s: %v\n%s", command, err, stderrBuf.String())
+	}
+	return string(output), nil
 }
 
 // parseToolCall parses a tool call from provider-specific format to our unified format

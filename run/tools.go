@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
-	var_template "github.com/xhd2015/go-var-template"
+	"github.com/xhd2015/kode-ai/chat/strinterplot"
 	"github.com/xhd2015/kode-ai/internal/jsondecode"
 	"github.com/xhd2015/kode-ai/tools"
 	"github.com/xhd2015/llm-tools/jsonschema"
@@ -77,7 +76,7 @@ func executeTool(ctx context.Context, toolName string, arguments string, default
 		if err := jsondecode.UnmarshalSafe([]byte(arguments), &m); err != nil {
 			return fmt.Sprintf("parse args %s: %v", toolName, err), true
 		}
-		command, err := interplotList(toolInfo.ToolDefinition.Command, m)
+		command, err := strinterplot.InterplotList(toolInfo.ToolDefinition.Command, m)
 		if err != nil {
 			return fmt.Sprintf("interplot %s: %v", toolName, err), true
 		}
@@ -116,48 +115,6 @@ func (c ToolInfoMapping) AddTool(toolName string, toolInfo *ToolInfo) error {
 	}
 	c[toolName] = toolInfo
 	return nil
-}
-
-func interplotList(list []string, args map[string]any) ([]string, error) {
-	argsStr := make(map[string]string, len(args))
-	for k, v := range args {
-		str, err := getStr(v)
-		if err != nil {
-			return nil, fmt.Errorf("get str %s: %v", k, err)
-		}
-		argsStr[k] = str
-	}
-
-	res := make([]string, len(list))
-	for i, v := range list {
-		str, err := interplot(v, argsStr)
-		if err != nil {
-			return nil, fmt.Errorf("interplot %s: %v", v, err)
-		}
-		res[i] = str
-	}
-	return res, nil
-}
-
-func interplot(tpl string, args map[string]string) (string, error) {
-	ctpl := var_template.Compile(tpl)
-	return ctpl.Execute(args)
-}
-
-func getStr(v interface{}) (string, error) {
-	switch v := v.(type) {
-	case string:
-		return v, nil
-	case int:
-		return strconv.Itoa(v), nil
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64), nil
-	}
-	jsonRes, err := json.Marshal(v)
-	if err != nil {
-		return "", err
-	}
-	return string(jsonRes), nil
 }
 
 // MCP client functionality
