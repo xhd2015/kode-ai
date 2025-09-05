@@ -70,7 +70,7 @@ func ExecuteBuiltinTool(ctx context.Context, call types.ToolCall) (types.ToolRes
 }
 
 // executeTool executes a tool using the tool info mapping
-func executeTool(ctx context.Context, toolName string, arguments string, defaultWorkingDir string, toolInfoMapping ToolInfoMapping) (string, bool) {
+func executeTool(ctx context.Context, stream types.StreamContext, call types.ToolCall, toolName string, arguments string, defaultWorkingDir string, toolInfoMapping ToolInfoMapping) (string, bool) {
 	toolInfo, ok := toolInfoMapping[toolName]
 	if !ok {
 		return fmt.Sprintf("Unknown tool: %s", toolName), false
@@ -103,6 +103,25 @@ func executeTool(ctx context.Context, toolName string, arguments string, default
 			return fmt.Sprintf("execute mcp %s/%s: %v", toolInfo.MCPServer, toolName, err), true
 		}
 	} else if toolInfo.ToolDefinition != nil {
+		if toolInfo.ToolDefinition.Handle != nil {
+			toolResult, handled, err := toolInfo.ToolDefinition.Handle(ctx, stream, call)
+			if err != nil {
+				return fmt.Sprintf("execute tool %s error: %v", toolName, err), true
+			}
+			if handled {
+				if toolResult.Error != "" {
+					return toolResult.Error, true
+				}
+				if s, ok := toolResult.Content.(string); ok {
+					return s, true
+				}
+				jsonRes, err := json.Marshal(toolResult.Content)
+				if err != nil {
+					return fmt.Sprintf("marshalling result %s: %v", toolName, err), true
+				}
+				return string(jsonRes), true
+			}
+		}
 		if len(toolInfo.ToolDefinition.Command) > 0 {
 			// Handle custom command-based tools
 			var m map[string]any
@@ -179,7 +198,7 @@ func (c *Client) executeToolWithCallback(ctx context.Context, stream types.Strea
 	}
 
 	// Fall back to built-in tool execution
-	resultStr, ok := executeTool(ctx, call.Name, call.RawArgs, defaultWorkingDir, toolInfoMapping)
+	resultStr, ok := executeTool(ctx, stream, call, call.Name, call.RawArgs, defaultWorkingDir, toolInfoMapping)
 	if !ok {
 		// If streams are provided, use bidirectional stream communication
 		if c.stdinReader != nil {
