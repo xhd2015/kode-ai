@@ -91,6 +91,16 @@ func (h *CliHandler) HandleCli(ctx context.Context, message string, coreOpts ...
 		}
 	}
 
+	if h.opts.RecordFile != "" {
+		prev := eventCallback
+		eventCallback = func(event types.Message) {
+			if prev != nil {
+				prev(event)
+			}
+			h.saveToRecord(event)
+		}
+	}
+
 	// Prepare core options
 	allOpts := append(coreOpts, WithHistory(loadedHistory))
 	allOpts = append(allOpts, WithEventCallback(eventCallback))
@@ -121,23 +131,6 @@ func (h *CliHandler) handleCliRequest(ctx context.Context, req types.Request) er
 	response, err := h.client.ChatRequest(ctx, req)
 	if err != nil {
 		return fmt.Errorf("chat request: %w", err)
-	}
-
-	// Record messages if record file is specified
-	if h.opts.RecordFile != "" && req.Message != "" {
-		// Record user message first
-		userMsg := CreateMessage(types.MsgType_Msg, types.Role_User, h.client.config.Model, req.Message)
-		if err := h.saveToRecord(userMsg); err != nil {
-			return fmt.Errorf("record user message: %w", err)
-		}
-
-		// TODO: record all response messages
-		// // Record all response messages
-		// for _, msg := range response.Messages {
-		// 	if err := h.saveToRecord(msg); err != nil {
-		// 		return fmt.Errorf("record response message: %w", err)
-		// 	}
-		// }
 	}
 
 	// Log token usage if enabled
