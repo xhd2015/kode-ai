@@ -314,8 +314,13 @@ const (
 	ModelGPTo3                    = "o3"                // $2
 	ModelClaude3_7Sonnet          = "claude-3-7-sonnet" // $3
 	ModelClaude3_7Sonnet_20250219 = "claude-3-7-sonnet@20250219"
-	ModelClaudeSonnet4            = "claude-sonnet-4" // $3
-	ModelClaudeSonnet4_20250514   = "claude-sonnet-4@20250514"
+
+	ModelClaudeSonnet4          = "claude-sonnet-4" // $3
+	ModelClaudeSonnet4_20250514 = "claude-sonnet-4@20250514"
+
+	ModelClaudeSonnet4_5        = "claude-sonnet-4-5" // $3
+	ModelClaudeSonnet4_20250929 = "claude-sonnet-4-5@20250929"
+
 	// Gemini
 	ModelGemini2_0_Flash      = "gemini-2.0-flash"
 	ModelGemini2_0_Flash_001  = "gemini-2.0-flash-001"
@@ -335,6 +340,9 @@ const (
 
 // AllModels contains all supported models
 var AllModels = []string{
+	ModelClaudeSonnet4_5,
+	ModelClaudeSonnet4_20250929,
+
 	ModelClaudeSonnet4,
 	ModelClaudeSonnet4_20250514,
 	ModelClaude3_7Sonnet,
