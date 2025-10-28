@@ -1,6 +1,6 @@
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/xhd2015/kode-ai/types v0.0.3 h1:Q6uNLX0HBI3c6Js3G6bHPYVtLXsWawUgO2nBGJXAZP4=
-github.com/xhd2015/kode-ai/types v0.0.3/go.mod h1:cVOvRFRKGsKZuqYfZoi0+4eM+Z45fZWTHObJuvqcgTY=
-github.com/xhd2015/llm-tools v0.0.17 h1:77mSN/sVq2ExQ18/9xDd28+D/2C831lstxJpMI0jLyo=
-github.com/xhd2015/llm-tools v0.0.17/go.mod h1:RmRh4/b1ybL3L8ZSp9hi54giE1iOhog/h9Wir6DDX8g=
+github.com/xhd2015/kode-ai/types v0.0.4 h1:ffMUO3TincotxHr4P6lz7722PPEHsebkppHJAwCQM98=
+github.com/xhd2015/kode-ai/types v0.0.4/go.mod h1:cVOvRFRKGsKZuqYfZoi0+4eM+Z45fZWTHObJuvqcgTY=
+github.com/xhd2015/llm-tools v0.0.19 h1:iIz7zWbwHmddiRoIoL5or3aFqkECkxroJnd5a4uoBRs=
+github.com/xhd2015/llm-tools v0.0.19/go.mod h1:RmRh4/b1ybL3L8ZSp9hi54giE1iOhog/h9Wir6DDX8g=

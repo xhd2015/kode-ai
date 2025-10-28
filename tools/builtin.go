@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/xhd2015/llm-tools/tools/batch_read_file"
@@ -14,6 +15,7 @@ import (
 	"github.com/xhd2015/llm-tools/tools/list_dir"
 	"github.com/xhd2015/llm-tools/tools/read_file"
 	"github.com/xhd2015/llm-tools/tools/rename_file"
+	"github.com/xhd2015/llm-tools/tools/run_bash_script"
 	"github.com/xhd2015/llm-tools/tools/run_terminal_cmd"
 	"github.com/xhd2015/llm-tools/tools/search_replace"
 	"github.com/xhd2015/llm-tools/tools/send_answer"
@@ -97,6 +99,11 @@ var tools = []*ExecutorInfo{
 		Name:       "run_terminal_cmd",
 		Definition: run_terminal_cmd.GetToolDefinition(),
 		Executor:   RunTerminalCmdExecutor{},
+	},
+	{
+		Name:       "run_bash_script",
+		Definition: run_bash_script.GetToolDefinition(),
+		Executor:   RunBashScriptExecutor{},
 	},
 	{
 		Name:       "file_search",
@@ -221,6 +228,31 @@ func (e RunTerminalCmdExecutor) Execute(arguments string, opts ExecuteOptions) (
 		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
 	}
 	return run_terminal_cmd.RunTerminalCmd(req)
+}
+
+type RunBashScriptExecutor struct {
+}
+
+func (e RunBashScriptExecutor) Execute(arguments string, opts ExecuteOptions) (interface{}, error) {
+	req, err := run_bash_script.ParseJSONRequest(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("parse args: %v", err)
+	}
+	req.Cwd = joinDir(opts.DefaultWorkspaceRoot, req.Cwd)
+	return run_bash_script.RunBashScript(req)
+}
+
+func joinDir(workspaceRoot, dir string) string {
+	if workspaceRoot == "" {
+		return dir
+	}
+	if dir == "" {
+		return workspaceRoot
+	}
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	return filepath.Join(workspaceRoot, dir)
 }
 
 type TreeExecutor struct {

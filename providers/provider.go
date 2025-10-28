@@ -31,7 +31,7 @@ func GetModelAPIShape(model string) (APIShape, error) {
 	switch model {
 	case ModelGPT4_1, ModelGPT4_1_Mini, ModelGPT4o, ModelGPT4oMini, ModelGPT4oNano, ModelGPTo4Mini, ModelGPTo3:
 		return APIShapeOpenAI, nil
-	case ModelClaude3_7Sonnet, ModelClaude3_7Sonnet_20250219, ModelClaudeSonnet4, ModelClaudeSonnet4_20250514:
+	case ModelClaude3_7Sonnet, ModelClaude3_7Sonnet_20250219, ModelClaudeSonnet4, ModelClaudeSonnet4_20250514, types.ModelClaudeSonnet4_5, types.ModelClaudeSonnet4_20250929:
 		return APIShapeAnthropic, nil
 	case ModelGemini2_0_Flash, ModelGemini2_0_Flash_001, ModelGemini2_5_Pro, ModelGemini2_5_Pro_0605, ModelGemini2_5_Flash, ModelGemini2_5_Flash_0520:
 		return APIShapeGemini, nil

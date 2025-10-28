@@ -21,6 +21,7 @@ var builtinToolNames = []string{
 	"search_replace",
 	"send_answer",
 	"run_terminal_cmd",
+	"run_bash_script",
 	"file_search",
 	"todo_write",
 	"web_search",
@@ -66,6 +67,8 @@ func GetRandomToolArgsForTool(toolName string) string {
 		return `{"answer": "This is the answer"}`
 	case "run_terminal_cmd":
 		return `{"command": "ls -la", "is_background": false}`
+	case "run_bash_script":
+		return `{"script": "ls -la"}`
 	case "file_search":
 		return `{"query": "example"}`
 	case "todo_write":
