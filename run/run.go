@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/kode-ai/chat"
 	"github.com/xhd2015/kode-ai/internal/ioread"
 	"github.com/xhd2015/kode-ai/providers"
 	"github.com/xhd2015/kode-ai/run/mock_server"
@@ -442,13 +443,11 @@ Examples:
   kode view tmp/chat.json --tools
 `
 
-const maxLimit = 2048
-
 func limitPrintLength(s string) string {
-	if len(s) < maxLimit+3 {
+	if len(s) < chat.MAX_PRINT_LIMIT+3 {
 		return s
 	}
-	return s[:maxLimit] + "..."
+	return s[:chat.MAX_PRINT_LIMIT] + "..."
 }
 
 // just like replay the whole messages

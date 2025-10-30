@@ -501,13 +501,13 @@ type GeminiResponseResult struct {
 	ToolResults  []*genai.Content
 }
 
-const maxLimit = 256
+const MAX_PRINT_LIMIT = 2048
 
 func limitPrintLength(s string) string {
-	if len(s) < maxLimit+3 {
+	if len(s) < MAX_PRINT_LIMIT+3 {
 		return s
 	}
-	return s[:maxLimit] + "..."
+	return s[:MAX_PRINT_LIMIT] + "..."
 }
 
 // processOpenAIResponse processes OpenAI API response
