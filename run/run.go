@@ -442,7 +442,7 @@ Examples:
   kode view tmp/chat.json --tools
 `
 
-const maxLimit = 256
+const maxLimit = 2048
 
 func limitPrintLength(s string) string {
 	if len(s) < maxLimit+3 {
