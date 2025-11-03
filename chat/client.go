@@ -309,7 +309,8 @@ func (c *Client) ChatRequest(ctx context.Context, req types.Request) (*types.Res
 				sendMessage = anthropic_helper.MarkMsgsEphemeralCache(msgsUnion.Anthropic)
 			}
 			result, err := anthropic_helper.Chat(ctx, clients.Anthropic, anthropic.MessageNewParams{
-				MaxTokens: 64 * 1024, // according to Anthropic, max for 4.5 is 64K, this effectively disables the limit
+				// if MaxTokens > 20K:  anthropic API call: streaming is strongly recommended for operations that may take longer than 10 minutes
+				MaxTokens: 20 * 1024, // according to Anthropic, max for 4.5 is 64K, this effectively disables the limit
 				Model:     anthropic.Model(c.config.Model),
 				Messages:  sendMessage,
 				System:    systemAnthropic,
