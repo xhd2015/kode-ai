@@ -309,11 +309,11 @@ func (c *Client) ChatRequest(ctx context.Context, req types.Request) (*types.Res
 				sendMessage = anthropic_helper.MarkMsgsEphemeralCache(msgsUnion.Anthropic)
 			}
 			result, err := anthropic_helper.Chat(ctx, clients.Anthropic, anthropic.MessageNewParams{
-				MaxTokens: 2048,
-				Model:     anthropic.Model(c.config.Model),
-				Messages:  sendMessage,
-				System:    systemAnthropic,
-				Tools:     toolsAnthropic,
+				// MaxTokens: 2048, // don't limit output tokens
+				Model:    anthropic.Model(c.config.Model),
+				Messages: sendMessage,
+				System:   systemAnthropic,
+				Tools:    toolsAnthropic,
 			})
 			if err != nil {
 				return nil, fmt.Errorf("anthropic API call: %w", err)
