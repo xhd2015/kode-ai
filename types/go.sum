@@ -1,2 +1,4 @@
+github.com/shopspring/decimal v1.4.0 h1:bxl37RwXBklmTi0C79JfXCEBD1cqqHt0bbgBAGFp81k=
+github.com/shopspring/decimal v1.4.0/go.mod h1:gawqmDU56v4yIKSwfBSFip1HdCCXN8/+DMd9qYNcwME=
 github.com/xhd2015/llm-tools v0.0.17 h1:77mSN/sVq2ExQ18/9xDd28+D/2C831lstxJpMI0jLyo=
 github.com/xhd2015/llm-tools v0.0.17/go.mod h1:RmRh4/b1ybL3L8ZSp9hi54giE1iOhog/h9Wir6DDX8g=
