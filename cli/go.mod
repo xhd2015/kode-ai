@@ -10,7 +10,7 @@ require github.com/xhd2015/llm-tools v0.0.19
 
 require (
 	github.com/gorilla/websocket v1.5.3
-	github.com/xhd2015/kode-ai v0.0.28
+	github.com/xhd2015/kode-ai v0.0.29
 )
 
 require github.com/shopspring/decimal v1.4.0 // indirect
