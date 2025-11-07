@@ -59,6 +59,14 @@ var cluade3_7Cost = ModelCost{
 	OutputUSDPer1M:          "15.00",
 }
 
+// see https://www.anthropic.com/news/claude-sonnet-4-5
+var claudeSonnet4_5Cost = ModelCost{
+	InputUSDPer1M:           "3.00",
+	InputCacheWriteUSDPer1M: "3.75", // cache has 5minute duration
+	InputCacheReadUSDPer1M:  "0.30",
+	OutputUSDPer1M:          "15.00",
+}
+
 // for <200k input tokens
 var gemini2_0_FlashCost = ModelCost{
 	InputUSDPer1M:          "0.1",
@@ -119,10 +127,12 @@ var modelCostMapping = map[string]ModelCost{
 		OutputUSDPer1M:         "8",
 	},
 	// see https://openai.com/api/pricing/
-	ModelClaude3_7Sonnet:          cluade3_7Cost,
-	ModelClaude3_7Sonnet_20250219: cluade3_7Cost,
-	ModelClaudeSonnet4:            cluade3_7Cost,
-	ModelClaudeSonnet4_20250514:   cluade3_7Cost,
+	ModelClaude3_7Sonnet:              cluade3_7Cost,
+	ModelClaude3_7Sonnet_20250219:     cluade3_7Cost,
+	ModelClaudeSonnet4:                cluade3_7Cost,
+	ModelClaudeSonnet4_20250514:       cluade3_7Cost,
+	types.ModelClaudeSonnet4_5:        claudeSonnet4_5Cost,
+	types.ModelClaudeSonnet4_20250929: claudeSonnet4_5Cost,
 
 	// see https://ai.google.dev/gemini-api/docs/pricing
 	ModelGemini2_0_Flash:      gemini2_0_FlashCost,
