@@ -90,6 +90,9 @@ type Message struct {
 	// for message token usage record
 	TokenUsage *TokenUsage `json:"token_usage,omitempty"`
 
+	// for message token cost record
+	TokenCost *TokenCost `json:"token_cost,omitempty"`
+
 	// Extended structured metadata
 	Metadata Metadata `json:"metadata,omitempty"`
 

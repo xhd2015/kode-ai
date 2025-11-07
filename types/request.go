@@ -55,11 +55,12 @@ type StreamPair struct {
 
 // Response represents a chat response
 type Response struct {
-	// TODO: populate these fields
 	TokenUsage TokenUsage `json:"token_usage"` // Token consumption details
 	Cost       *TokenCost `json:"cost"`        // Cost information if available
 	StopReason string     `json:"stop_reason"` // Why the conversation stopped
 	RoundsUsed int        `json:"rounds_used"` // Number of conversation rounds used
+
+	NumToolCalls int `json:"num_tool_calls"` // Number of tool calls used
 
 	// last response message of the chat
 	// assitant respones including msg and tool calls
