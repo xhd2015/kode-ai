@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/xhd2015/kode-ai/providers"
+	"github.com/xhd2015/kode-ai/types/providers"
 	"github.com/xhd2015/kode-ai/types"
 )
 
