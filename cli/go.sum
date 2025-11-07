@@ -1,6 +1,10 @@
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/xhd2015/kode-ai/types v0.0.4 h1:ffMUO3TincotxHr4P6lz7722PPEHsebkppHJAwCQM98=
-github.com/xhd2015/kode-ai/types v0.0.4/go.mod h1:cVOvRFRKGsKZuqYfZoi0+4eM+Z45fZWTHObJuvqcgTY=
+github.com/shopspring/decimal v1.4.0 h1:bxl37RwXBklmTi0C79JfXCEBD1cqqHt0bbgBAGFp81k=
+github.com/shopspring/decimal v1.4.0/go.mod h1:gawqmDU56v4yIKSwfBSFip1HdCCXN8/+DMd9qYNcwME=
+github.com/xhd2015/kode-ai v0.0.28 h1:iJRImf43V7vGHyy8bVbQ57c9KotmKUb79QC5Fka3NlE=
+github.com/xhd2015/kode-ai v0.0.28/go.mod h1:QGcTMTK0Bfbad5MDi/dPRvFLbBih2yDKCfwKMyI8VX0=
+github.com/xhd2015/kode-ai/types v0.0.5 h1:lILHopz14jy5vofW0oikSqrmGFTt/ohw1kBUje8ZvlU=
+github.com/xhd2015/kode-ai/types v0.0.5/go.mod h1:cVOvRFRKGsKZuqYfZoi0+4eM+Z45fZWTHObJuvqcgTY=
 github.com/xhd2015/llm-tools v0.0.19 h1:iIz7zWbwHmddiRoIoL5or3aFqkECkxroJnd5a4uoBRs=
 github.com/xhd2015/llm-tools v0.0.19/go.mod h1:RmRh4/b1ybL3L8ZSp9hi54giE1iOhog/h9Wir6DDX8g=

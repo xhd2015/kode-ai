@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xhd2015/kode-ai/providers"
 	"github.com/xhd2015/kode-ai/types"
 )
 
@@ -99,7 +100,7 @@ func (c *serverSession) chatWithServer(ctx context.Context, server string, req t
 	}
 
 	// Process WebSocket messages
-	return c.processWebSocketMessages(ctx, conn, req.ToolCallback, req.FollowUpCallback, req.ToolDefinitions)
+	return c.processWebSocketMessages(ctx, conn, req.Model, req.ToolCallback, req.FollowUpCallback, req.ToolDefinitions)
 }
 
 // writeEvent writes an event and calls the event callback
@@ -121,7 +122,7 @@ func (c *serverSession) writeEvent(msg types.Message) error {
 }
 
 // processWebSocketMessages processes messages from the WebSocket connection
-func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *websocket.Conn, toolCallback types.ToolCallback, followUpCallback types.FollowUpCallback, toolDefs []*types.UnifiedTool) (*types.Response, error) {
+func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *websocket.Conn, model string, toolCallback types.ToolCallback, followUpCallback types.FollowUpCallback, toolDefs []*types.UnifiedTool) (*types.Response, error) {
 	var response types.Response
 
 	// ping every 10s
@@ -183,8 +184,31 @@ func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *webs
 			continue
 		}
 
+		if msg.Type == types.MsgType_ToolCall {
+			response.NumToolCalls++
+		}
+
 		if msg.Type == types.MsgType_Msg && msg.Role == types.Role_Assistant {
 			c.lastAssistantMsg = msg.Content
+		}
+		if msg.Type == types.MsgType_TokenUsage && msg.TokenUsage != nil {
+			tokenUsage := msg.TokenUsage
+			if msg.TokenCost == nil {
+				response.TokenUsage = response.TokenUsage.Add(*tokenUsage)
+				provider, _ := providers.GetModelAPIShape(model)
+				if provider != "" {
+					modelCost, ok := providers.ComputeCost(provider, model, *msg.TokenUsage)
+					if ok {
+						msg.TokenCost = &modelCost
+					}
+				}
+			}
+			if msg.TokenCost != nil {
+				if response.Cost == nil {
+					response.Cost = &types.TokenCost{}
+				}
+				*response.Cost = response.Cost.Add(*msg.TokenCost)
+			}
 		}
 
 		if c.eventCallback != nil {
