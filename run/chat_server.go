@@ -7,14 +7,7 @@ import (
 	"github.com/xhd2015/less-gen/flags"
 )
 
-// handleChatServer starts a WebSocket chat server
-func handleChatServer(args []string) error {
-	var verbose bool
-	var listen int = 8080
-
-	flagsParser := flags.Bool("-v,--verbose", &verbose).
-		Int("--listen", &listen).
-		Help("-h,--help", `chat-server - Start a WebSocket chat server
+const helpChatServer = `chat-server - Start a WebSocket chat server
 
 Usage: kode chat-server [OPTIONS]
 
@@ -28,7 +21,16 @@ The server exposes a WebSocket endpoint at /stream that supports all events from
 Examples:
   kode chat-server --listen 8080
   kode chat-server --listen 3000 --verbose
-`)
+`
+
+// handleChatServer starts a WebSocket chat server
+func handleChatServer(args []string) error {
+	var verbose bool
+	var listen int = 8080
+
+	flagsParser := flags.Bool("-v,--verbose", &verbose).
+		Int("--listen", &listen).
+		Help("-h,--help", helpChatServer)
 
 	args, err := flagsParser.Parse(args)
 	if err != nil {

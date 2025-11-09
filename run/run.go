@@ -479,7 +479,7 @@ func handleView(args []string) error {
 
 	files := args
 	if showUsage {
-		var allMessages Messages
+		var allMessages types.Messages
 		for _, file := range files {
 			msg, err := loadHistoricalMessages(file)
 			if err != nil {
@@ -579,7 +579,7 @@ func mustMarshal(v interface{}) string {
 }
 
 // loadHistoricalMessages loads historical chat messages from the record file in unified format
-func loadHistoricalMessages(recordFile string) (Messages, error) {
+func loadHistoricalMessages(recordFile string) (types.Messages, error) {
 	var messages []types.Message
 
 	file, err := os.Open(recordFile)

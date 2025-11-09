@@ -399,8 +399,9 @@ func (wr *WebSocketReader) Unsubscribe(id string) {
 	wr.mutex.Lock()
 	defer wr.mutex.Unlock()
 
-	if ch, exists := wr.channels[id]; exists {
-		close(ch)
+	// if there are pending writers, we should notify them
+	// that the channel is closed
+	if _, exists := wr.channels[id]; exists {
 		delete(wr.channels, id)
 		if wr.verbose {
 			log.Printf("Unsubscribed from stream channel: streamID=%s", id)

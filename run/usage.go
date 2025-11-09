@@ -20,7 +20,7 @@ func showUsageFromRecordFile(recordFile string) error {
 	return showUsageFromMessages(messages)
 }
 
-func showUsageFromMessages(messages Messages) error {
+func showUsageFromMessages(messages types.Messages) error {
 	// calculate the usage
 	var total types.TokenUsageCost
 	var costs []types.TokenUsageCost

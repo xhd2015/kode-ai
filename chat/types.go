@@ -123,12 +123,7 @@ func (messages Messages) ToAnthropic() (msgs []anthropic.MessageParam, systemPro
 			toolUse := anthropic.NewToolUseBlock(msg.ToolUseID, m, msg.ToolName)
 			blocks = append(blocks, toolUse)
 		case types.MsgType_ToolResult:
-			toolResult := anthropic.NewToolResultBlock(msg.ToolUseID)
-			toolResult.OfToolResult.Content = append(toolResult.OfToolResult.Content, anthropic.ToolResultBlockParamContentUnion{
-				OfText: &anthropic.TextBlockParam{
-					Text: msg.Content,
-				},
-			})
+			toolResult := anthropic.NewToolResultBlock(msg.ToolUseID, msg.Content, false)
 			blocks = append(blocks, toolResult)
 		case types.MsgType_Msg:
 			textBlock := anthropic.NewTextBlock(msg.Content)

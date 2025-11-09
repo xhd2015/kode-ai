@@ -3,7 +3,7 @@ module github.com/xhd2015/kode-ai
 go 1.24
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.5.0
+	github.com/anthropics/anthropic-sdk-go v1.17.0
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -15,7 +15,7 @@ require (
 	github.com/xhd2015/less-gen v0.0.18
 	github.com/xhd2015/llm-tools v0.0.19
 	github.com/xhd2015/xgo v1.0.49-0.20240916074001-40aa40fc7623
-	golang.org/x/term v0.32.0
+	golang.org/x/term v0.33.0
 	google.golang.org/genai v1.15.0
 )
 
@@ -46,7 +46,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/tidwall/gjson v1.14.4 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
@@ -55,11 +55,11 @@ require (
 	github.com/yuin/goldmark v1.7.8 // indirect
 	github.com/yuin/goldmark-emoji v1.0.5 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	google.golang.org/grpc v1.66.2 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
