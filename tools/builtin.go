@@ -333,10 +333,7 @@ func (e SearchReplaceExecutor) Execute(arguments string, opts ExecuteOptions) (i
 	if err != nil {
 		return nil, fmt.Errorf("parse args: %v", err)
 	}
-	if req.WorkspaceRoot == "" && opts.DefaultWorkspaceRoot != "" {
-		req.WorkspaceRoot = opts.DefaultWorkspaceRoot
-	}
-	return search_replace.SearchReplace(req)
+	return search_replace.SearchReplace(req, opts.DefaultWorkspaceRoot)
 }
 
 type SendAnswerExecutor struct {
