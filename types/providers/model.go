@@ -76,6 +76,11 @@ var modelCostMapping = map[string]types.ModelCost{
 		InputCacheReadUSDPer1M: "0.50",
 		OutputUSDPer1M:         "8",
 	},
+	types.ModelGPT5_20250807: {
+		InputUSDPer1M:          "1.25",
+		InputCacheReadUSDPer1M: "0.125",
+		OutputUSDPer1M:         "10",
+	},
 	// see https://openai.com/api/pricing/
 	types.ModelClaude3_7Sonnet:          cluade3_7Cost,
 	types.ModelClaude3_7Sonnet_20250219: cluade3_7Cost,
