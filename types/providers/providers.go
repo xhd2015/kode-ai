@@ -29,7 +29,7 @@ const (
 
 func GetModelAPIShape(model string) (APIShape, error) {
 	switch model {
-	case types.ModelGPT4_1, types.ModelGPT4_1_Mini, types.ModelGPT4o, types.ModelGPT4oMini, types.ModelGPT4oNano, types.ModelGPTo4Mini, types.ModelGPTo3:
+	case types.ModelGPT4_1, types.ModelGPT4_1_Mini, types.ModelGPT4o, types.ModelGPT4oMini, types.ModelGPT4oNano, types.ModelGPTo4Mini, types.ModelGPTo3, types.ModelGPT5_20250807:
 		return APIShapeOpenAI, nil
 	case types.ModelClaude3_7Sonnet, types.ModelClaude3_7Sonnet_20250219, types.ModelClaudeSonnet4, types.ModelClaudeSonnet4_20250514, types.ModelClaudeSonnet4_5, types.ModelClaudeSonnet4_20250929:
 		return APIShapeAnthropic, nil
@@ -49,7 +49,7 @@ func GetModelAPIShape(model string) (APIShape, error) {
 
 func GetModelProvider(model string) (Provider, error) {
 	switch model {
-	case types.ModelGPT4_1, types.ModelGPT4_1_Mini, types.ModelGPT4o, types.ModelGPT4oMini, types.ModelGPT4oNano, types.ModelGPTo4Mini, types.ModelGPTo3:
+	case types.ModelGPT4_1, types.ModelGPT4_1_Mini, types.ModelGPT4o, types.ModelGPT4oMini, types.ModelGPT4oNano, types.ModelGPTo4Mini, types.ModelGPTo3, types.ModelGPT5_20250807:
 		return ProviderOpenAI, nil
 	case types.ModelClaude3_7Sonnet, types.ModelClaude3_7Sonnet_20250219, types.ModelClaudeSonnet4, types.ModelClaudeSonnet4_20250514:
 		return ProviderAnthropic, nil
