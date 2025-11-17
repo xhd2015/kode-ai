@@ -11,6 +11,7 @@ require (
 	github.com/openai/openai-go v1.8.3
 	github.com/shopspring/decimal v1.4.0
 	github.com/xhd2015/go-var-template v0.0.4
+	github.com/xhd2015/kode-ai/cli v0.0.8
 	github.com/xhd2015/kode-ai/types v0.0.8
 	github.com/xhd2015/less-gen v0.0.18
 	github.com/xhd2015/llm-tools v0.0.21

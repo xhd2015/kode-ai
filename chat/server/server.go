@@ -153,7 +153,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			s.sendError(conn, fmt.Sprintf("Failed to load initial events: %v", err))
 			return
 		}
-		req.History = s.convertMessagesToHistory(messages)
+		req.History = append(req.History, s.convertMessagesToHistory(messages)...)
 		if s.opts.Verbose {
 			log.Printf("Loaded %d initial events, converted to %d history messages for %s", len(messages), len(req.History), r.RemoteAddr)
 		}

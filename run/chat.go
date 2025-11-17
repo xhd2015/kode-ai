@@ -34,6 +34,9 @@ type ChatOptions struct {
 
 	// MCP server configuration
 	mcpServers []string
+
+	withServer       string
+	chatWithServerFn func(ctx context.Context, server string, req types.Request) (*types.Response, error)
 }
 
 // Getter methods for ChatOptions to allow external access
@@ -159,6 +162,14 @@ func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg str
 		Verbose:            opts.verbose,
 		JSONOutput:         opts.jsonOutput || opts.stdStream,
 	})
+
+	withServer := opts.withServer
+	if withServer != "" {
+		if opts.chatWithServerFn == nil {
+			return fmt.Errorf("chat with server function is not set")
+		}
+		return cliHandler.HandleCliWithServer(context.Background(), msg, withServer, opts.chatWithServerFn, coreOpts...)
+	}
 
 	// Execute using CLI handler
 	return cliHandler.HandleCli(context.Background(), msg, coreOpts...)

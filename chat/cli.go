@@ -51,6 +51,20 @@ func NewCliHandler(client *Client, opts CliOptions) *CliHandler {
 
 // HandleCLI handles a chat request with CLI-specific behavior
 func (h *CliHandler) HandleCli(ctx context.Context, message string, coreOpts ...types.ChatOption) error {
+	return h.handleCliEnablingServer(ctx, message, "", nil, coreOpts...)
+}
+
+func (h *CliHandler) HandleCliWithServer(ctx context.Context, message string, server string, chatWithServer func(ctx context.Context, server string, req types.Request) (*types.Response, error), coreOpts ...types.ChatOption) error {
+	if server == "" {
+		return fmt.Errorf("requires server")
+	}
+	if chatWithServer == nil {
+		return fmt.Errorf("requires chat with server function")
+	}
+	return h.handleCliEnablingServer(ctx, message, server, chatWithServer, coreOpts...)
+}
+
+func (h *CliHandler) handleCliEnablingServer(ctx context.Context, message string, server string, chatWithServer func(ctx context.Context, server string, req types.Request) (*types.Response, error), coreOpts ...types.ChatOption) error {
 	// Load history if record file is specified
 	var loadedHistory []types.Message
 	if h.opts.RecordFile != "" {
@@ -117,18 +131,51 @@ func (h *CliHandler) HandleCli(ctx context.Context, message string, coreOpts ...
 		Message: message,
 	}
 
+	if server != "" && chatWithServer != nil {
+		req.Model = h.client.config.Model
+		req.Token = h.client.config.Token
+		req.BaseURL = h.client.config.BaseURL
+	}
+
 	// Apply options
 	for _, opt := range allOpts {
 		opt(&req)
 	}
 
 	h.opts.StreamPair = req.StreamPair
-	return h.handleCliRequest(ctx, req)
+	return h.handleCliRequest(ctx, server, chatWithServer, req)
 }
 
-func (h *CliHandler) handleCliRequest(ctx context.Context, req types.Request) error {
-	// Execute chat
-	response, err := h.client.ChatRequest(ctx, req)
+func (h *CliHandler) handleCliRequest(ctx context.Context,
+	server string,
+	chatWithServer func(ctx context.Context, server string, req types.Request) (*types.Response, error), req types.Request) error {
+	var response *types.Response
+	var err error
+	if server != "" && chatWithServer != nil {
+
+		// record user message
+		if req.EventCallback != nil && req.Message != "" {
+			req.EventCallback(types.Message{
+				Type:      types.MsgType_Msg,
+				Role:      types.Role_User,
+				Content:   req.Message,
+				Timestamp: time.Now().Unix(),
+			})
+		}
+
+		cleanHistory := make([]types.Message, 0, len(req.History))
+		for _, msg := range req.History {
+			if msg.Type.HistorySendable() {
+				cleanHistory = append(cleanHistory, msg)
+			}
+		}
+		cloneReq := req
+		cloneReq.History = cleanHistory
+		response, err = chatWithServer(ctx, server, cloneReq)
+	} else {
+		// Execute chat
+		response, err = h.client.ChatRequest(ctx, req)
+	}
 	if err != nil {
 		return fmt.Errorf("chat request: %w", err)
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xhd2015/kode-ai/chat"
+	"github.com/xhd2015/kode-ai/cli"
 	"github.com/xhd2015/kode-ai/internal/ioread"
 	"github.com/xhd2015/kode-ai/providers"
 	"github.com/xhd2015/kode-ai/run/mock_server"
@@ -65,6 +66,7 @@ Options:
   --std-stream                    enable bidirectional tool callback communication via stdin/stdout
   -c,--config FILE                load configuration from JSON file
   --config-example                show example of config file	
+  --with-server SERVER            connect to a WebSocket chat server, e.g. http://localhost:8080, check 'kode chat-server --help' for more details
   -v,--verbose                    show verbose info
 
 Examples:
@@ -189,6 +191,8 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var stdStream bool
 	var waitForStreamEvents bool
 
+	var withServer string
+
 	flagsParser := flags.String("--token", &token).
 		Int("--max-round", &maxRound).
 		String("--base-url", &baseUrl).
@@ -211,6 +215,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		Bool("--json", &jsonOutput).
 		Bool("--std-stream", &stdStream).
 		Bool("--wait-for-stream-events", &waitForStreamEvents).
+		String("--with-server", &withServer).
 		Help("-h,--help", getHelp(baesCmd))
 
 	args, err = flagsParser.Parse(args)
@@ -321,7 +326,9 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		APIShape: apiShape,
 	}
 	return c.Handle(model, resolvedOpts.BaseUrl, resolvedOpts.Token, msg, ChatOptions{
-		maxRound: maxRound,
+		maxRound:         maxRound,
+		withServer:       withServer,
+		chatWithServerFn: cli.ChatWithServer,
 
 		systemPrompt:   systemPrompt,
 		logRequest:     logRequest,
