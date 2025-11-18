@@ -59,6 +59,14 @@ func (m MsgType) HistorySendable() bool {
 	return m == MsgType_Msg || m == MsgType_ToolCall || m == MsgType_ToolResult
 }
 
+func (m MsgType) IsFileRecordable() bool {
+	switch m {
+	case MsgType_Msg, MsgType_ToolCall, MsgType_ToolResult, MsgType_Info, MsgType_Error, MsgType_CacheInfo, MsgType_StopReason, MsgType_TokenUsage:
+		return true
+	}
+	return false
+}
+
 // Role represents the role of a message sender
 type Role string
 

@@ -51,7 +51,7 @@ func GetModelProvider(model string) (Provider, error) {
 	switch model {
 	case types.ModelGPT4_1, types.ModelGPT4_1_Mini, types.ModelGPT4o, types.ModelGPT4oMini, types.ModelGPT4oNano, types.ModelGPTo4Mini, types.ModelGPTo3, types.ModelGPT5_20250807:
 		return ProviderOpenAI, nil
-	case types.ModelClaude3_7Sonnet, types.ModelClaude3_7Sonnet_20250219, types.ModelClaudeSonnet4, types.ModelClaudeSonnet4_20250514:
+	case types.ModelClaude3_7Sonnet, types.ModelClaude3_7Sonnet_20250219, types.ModelClaudeSonnet4, types.ModelClaudeSonnet4_20250514, types.ModelClaudeSonnet4_5, types.ModelClaudeSonnet4_20250929:
 		return ProviderAnthropic, nil
 	case types.ModelGemini2_0_Flash, types.ModelGemini2_0_Flash_001, types.ModelGemini2_5_Pro, types.ModelGemini2_5_Pro_0605, types.ModelGemini2_5_Flash, types.ModelGemini2_5_Flash_0520:
 		return ProviderGemini, nil
