@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xhd2015/kode-ai/internal/ioread"
 	"github.com/xhd2015/kode-ai/internal/terminal"
 	"github.com/xhd2015/kode-ai/providers"
 	"github.com/xhd2015/kode-ai/types"
@@ -111,7 +112,9 @@ func (h *CliHandler) handleCliEnablingServer(ctx context.Context, message string
 			if prev != nil {
 				prev(event)
 			}
-			h.saveToRecord(event)
+			if event.Type.IsFileRecordable() {
+				h.saveToRecord(event)
+			}
 		}
 	}
 
@@ -152,7 +155,6 @@ func (h *CliHandler) handleCliRequest(ctx context.Context,
 	var response *types.Response
 	var err error
 	if server != "" && chatWithServer != nil {
-
 		// record user message
 		if req.EventCallback != nil && req.Message != "" {
 			req.EventCallback(types.Message{
@@ -162,6 +164,14 @@ func (h *CliHandler) handleCliRequest(ctx context.Context,
 				Timestamp: time.Now().Unix(),
 			})
 		}
+		systemPrompt := req.SystemPrompt
+		if systemPrompt != "" {
+			var err error
+			systemPrompt, err = ioread.ReadOrContent(systemPrompt)
+			if err != nil {
+				return fmt.Errorf("read system prompt: %w", err)
+			}
+		}
 
 		cleanHistory := make([]types.Message, 0, len(req.History))
 		for _, msg := range req.History {
@@ -170,6 +180,7 @@ func (h *CliHandler) handleCliRequest(ctx context.Context,
 			}
 		}
 		cloneReq := req
+		cloneReq.SystemPrompt = systemPrompt
 		cloneReq.History = cleanHistory
 		response, err = chatWithServer(ctx, server, cloneReq)
 	} else {
@@ -253,7 +264,7 @@ func (h *CliHandler) formatOutput(event types.Message) {
 	switch event.Type {
 	case types.MsgType_Msg:
 		// Print message content directly (streaming)
-		fmt.Print(event.Content)
+		fmt.Println(event.Content)
 
 	case types.MsgType_ToolCall:
 		toolCallStr := fmt.Sprintf("<tool_call>%s(%s)</tool_call>", event.ToolName, event.Content)

@@ -193,6 +193,8 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 
 	var withServer string
 
+	var viewFlag bool
+
 	flagsParser := flags.String("--token", &token).
 		Int("--max-round", &maxRound).
 		String("--base-url", &baseUrl).
@@ -216,6 +218,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		Bool("--std-stream", &stdStream).
 		Bool("--wait-for-stream-events", &waitForStreamEvents).
 		String("--with-server", &withServer).
+		Bool("--view", &viewFlag).
 		Help("-h,--help", getHelp(baesCmd))
 
 	args, err = flagsParser.Parse(args)
@@ -226,6 +229,18 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	if configExample {
 		fmt.Println(ExampleConfig)
 		return nil
+	}
+
+	if viewFlag {
+		if recordFile == "" {
+			return fmt.Errorf("--view requires --record")
+		}
+		return handleViewWithOptions(viewOptions{
+			verbose:       verbose,
+			lastAssistant: false,
+			showUsage:     false,
+			toolsOnly:     false,
+		}, []string{recordFile})
 	}
 
 	if stdStream && jsonOutput {
@@ -457,16 +472,21 @@ func limitPrintLength(s string) string {
 	return s[:chat.MAX_PRINT_LIMIT] + "..."
 }
 
+type viewOptions struct {
+	verbose       bool
+	lastAssistant bool
+	showUsage     bool
+	toolsOnly     bool
+}
+
 // just like replay the whole messages
 func handleView(args []string) error {
-	var verbose bool
-	var lastAssistant bool
-	var showUsage bool
-	var tools bool
-	args, err := flags.Bool("-v,--verbose", &verbose).
-		Bool("--last-assistant", &lastAssistant).
-		Bool("--show-usage", &showUsage).
-		Bool("--tools", &tools).
+	var opts viewOptions
+
+	args, err := flags.Bool("-v,--verbose", &opts.verbose).
+		Bool("--last-assistant", &opts.lastAssistant).
+		Bool("--show-usage", &opts.showUsage).
+		Bool("--tools", &opts.toolsOnly).
 		Help("-h,--help", viewHelp).
 		Parse(args)
 	if err != nil {
@@ -479,12 +499,21 @@ func handleView(args []string) error {
 		fmt.Print(strings.TrimPrefix(viewHelp, "\n"))
 		return nil
 	}
+	return handleViewWithOptions(opts, args)
+}
+
+func handleViewWithOptions(opts viewOptions, files []string) error {
+	verbose := opts.verbose
+	lastAssistant := opts.lastAssistant
+	showUsage := opts.showUsage
+	toolsOnly := opts.toolsOnly
+
+	_ = verbose
 
 	if showUsage && lastAssistant {
 		return fmt.Errorf("--show-usage and --last-assistant cannot be specified at the same time")
 	}
 
-	files := args
 	if showUsage {
 		var allMessages types.Messages
 		for _, file := range files {
@@ -523,7 +552,7 @@ func handleView(args []string) error {
 		}
 
 		for _, m := range msg {
-			if tools {
+			if toolsOnly {
 				switch m.Type {
 				case types.MsgType_ToolCall, types.MsgType_ToolResult:
 				default:
@@ -541,30 +570,43 @@ func handleView(args []string) error {
 				limitedContent := limitPrintLength(m.Content)
 				fmt.Printf("%s: <tool_result tool=%q>%s</tool_result>\n", m.Role, m.ToolName, limitedContent)
 			case types.MsgType_TokenUsage:
-				provider, err := providers.GetModelAPIShape(m.Model)
-				if err != nil {
-					fmt.Printf("%s: token cost: %v\n", m.Role, err)
-					continue
-				}
-				var tokenUsage types.TokenUsage
-				if m.TokenUsage != nil {
-					tokenUsage = *m.TokenUsage
-				}
+				if m.Model != "" {
+					provider, err := providers.GetModelAPIShape(m.Model)
+					if err != nil {
+						fmt.Printf("Token Usage: unsupported model %s\n", m.Model)
+						continue
+					}
+					var tokenUsage types.TokenUsage
+					if m.TokenUsage != nil {
+						tokenUsage = *m.TokenUsage
+					}
 
-				total.Usage = total.Usage.Add(tokenUsage)
+					total.Usage = total.Usage.Add(tokenUsage)
 
-				cost, costOK := providers.ComputeCost(provider, m.Model, tokenUsage)
-				var costUSD string
-				if costOK {
-					costUSD = "$" + cost.TotalUSD
-					total.Cost = total.Cost.Add(cost)
+					cost, costOK := providers.ComputeCost(provider, m.Model, tokenUsage)
+					var costUSD string
+					if costOK {
+						costUSD = "$" + cost.TotalUSD
+						total.Cost = total.Cost.Add(cost)
+					}
+					printTokenUsage(os.Stdout, "Token Usage", tokenUsage, costUSD)
+				} else {
+					fmt.Printf("Token Usage: empty model\n")
 				}
-				printTokenUsage(os.Stdout, "Token Usage", tokenUsage, costUSD)
 			case types.MsgType_StopReason:
 				// nothing
+				fmt.Printf("assistant: stop\n")
+			case types.MsgType_CacheInfo:
+				fmt.Println(m.Content)
+			case types.MsgType_Error:
+				fmt.Printf("error\n")
+			case types.MsgType_Info:
+				fmt.Println(m.Content)
 			default:
-				limitedContent := limitPrintLength(m.Content)
-				fmt.Printf("%s: (unrecognized msg type: %s)%s\n", m.Role, m.Type, limitedContent)
+				if m.Type.IsFileRecordable() {
+					limitedContent := limitPrintLength(m.Content)
+					fmt.Printf("%s: (unrecognized msg type: %s)%s\n", m.Role, m.Type, limitedContent)
+				}
 			}
 		}
 	}
