@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/xhd2015/kode-ai/types/providers"
 	"github.com/xhd2015/kode-ai/types"
+	"github.com/xhd2015/kode-ai/types/providers"
 )
 
 // serverSession handles WebSocket server communication
@@ -315,13 +316,23 @@ func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *webs
 
 // handleSingleToolCallbackAsync handles a single tool callback request using the WebSocket stream protocol
 func (c *serverSession) handleSingleToolCallbackAsync(ctx context.Context, streamID string, toolCallRequest types.Message, toolCallback types.ToolCallback) {
+	toolName := toolCallRequest.ToolName
 	defer func() {
 		if r := recover(); r != nil {
-			c.logger.Log(ctx, types.LogType_Error, "panic in handleSingleToolCallbackAsync: %v\n", r)
+			stack := debug.Stack()
+			var stackStr string
+			if len(stack) > 4096 {
+				stackStr = string(stack[:4096]) + "..."
+			} else {
+				stackStr = string(stack)
+			}
+
+			printStack := strings.ReplaceAll(stackStr, "\n", " ")
+			c.logger.Log(ctx, types.LogType_Error, "panic in handleSingleToolCallbackAsync: toolName=%s, %v, stack=%s", toolName, r, printStack)
 			response := types.Message{
 				Type:     types.MsgType_StreamResponseTool,
 				StreamID: streamID,
-				ToolName: toolCallRequest.ToolName,
+				ToolName: toolName,
 				Content:  "panic in handleSingleToolCallbackAsync",
 				Error:    fmt.Sprintf("%v", r),
 				Metadata: types.Metadata{
@@ -349,7 +360,7 @@ func (c *serverSession) handleSingleToolCallbackAsync(ctx context.Context, strea
 	// Create ToolCall struct
 	call := types.ToolCall{
 		ID:         streamID,
-		Name:       toolCallRequest.ToolName,
+		Name:       toolName,
 		Arguments:  args,
 		RawArgs:    argsJSON,
 		WorkingDir: workingDir,
@@ -390,7 +401,7 @@ func (c *serverSession) handleSingleToolCallbackAsync(ctx context.Context, strea
 	response := types.Message{
 		Type:     types.MsgType_StreamResponseTool,
 		StreamID: streamID,
-		ToolName: toolCallRequest.ToolName,
+		ToolName: toolName,
 		Content:  resultJSON,
 		Error:    toolError,
 		Metadata: types.Metadata{
