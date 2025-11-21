@@ -239,6 +239,10 @@ func (e RunBashScriptExecutor) Execute(arguments string, opts ExecuteOptions) (i
 		return nil, fmt.Errorf("parse args: %v", err)
 	}
 	req.Cwd = joinDir(opts.DefaultWorkspaceRoot, req.Cwd)
+	if req.CleanOutput == nil {
+		clean := true
+		req.CleanOutput = &clean
+	}
 	return run_bash_script.RunBashScript(req)
 }
 
