@@ -163,19 +163,27 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Input:  wsReader,
 		Output: NewWebSocketWriter(conn, s.opts.Verbose),
 	}
+
+	msgChan := make(chan types.Message, 100)
 	req.EventCallback = func(event types.Message) {
 		event = event.TimeFilled()
 		if s.opts.Verbose {
 			log.Printf("Sending event to %s: type=%s, role=%s, contentLen=%d", r.RemoteAddr, event.Type, event.Role, len(event.Content))
 		}
-		if err := conn.WriteJSON(event); err != nil {
-			log.Printf("Failed to send event: %v", err)
-		}
+		msgChan <- event
 	}
 
 	if s.opts.Verbose {
 		log.Printf("Starting chat execution for %s", r.RemoteAddr)
 	}
+
+	go func() {
+		for msg := range msgChan {
+			if err := conn.WriteJSON(msg); err != nil {
+				log.Printf("Failed to send event: %v", err)
+			}
+		}
+	}()
 
 	// Execute chat
 	_, err = chat.Chat(ctx, req)
@@ -184,6 +192,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		s.sendError(conn, fmt.Sprintf("Chat execution failed: %v", err))
 		return
 	}
+	close(msgChan)
 
 	if s.opts.Verbose {
 		log.Printf("Chat execution completed successfully for %s", r.RemoteAddr)

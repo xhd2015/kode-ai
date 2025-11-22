@@ -70,7 +70,7 @@ func ExecuteBuiltinTool(ctx context.Context, call types.ToolCall) (types.ToolRes
 }
 
 // executeTool executes a tool using the tool info mapping
-func executeTool(ctx context.Context, stream types.StreamContext, call types.ToolCall, toolName string, arguments string, defaultWorkingDir string, toolInfoMapping ToolInfoMapping) (string, bool) {
+func executeTool(ctx context.Context, stream types.StreamContext, call types.ToolCall, toolName string, arguments string, defaultWorkingDir string, toolInfoMapping ToolInfoMapping, eventCallback types.EventCallback) (string, bool) {
 	toolInfo, ok := toolInfoMapping[toolName]
 	if !ok {
 		return fmt.Sprintf("Unknown tool: %s", toolName), false
@@ -87,6 +87,7 @@ func executeTool(ctx context.Context, stream types.StreamContext, call types.Too
 		// Execute the tool with compile-time type safety
 		res, err = executor.Execute(arguments, tools.ExecuteOptions{
 			DefaultWorkspaceRoot: defaultWorkingDir,
+			EventCallback:        eventCallback,
 		})
 		if err != nil {
 			return fmt.Sprintf("execute %s: %v", toolName, err), true
@@ -183,7 +184,7 @@ func parseToolCall(toolName, toolID, arguments string, defaultWorkingDir string)
 }
 
 // executeToolWithCallback executes a tool using either custom callback, stream communication, or built-in execution
-func (c *Client) executeToolWithCallback(ctx context.Context, stream types.StreamContext, call types.ToolCall, callback types.ToolCallback, stdout io.Writer, defaultWorkingDir string, toolInfoMapping ToolInfoMapping) (types.ToolResult, error) {
+func (c *Client) executeToolWithCallback(ctx context.Context, stream types.StreamContext, call types.ToolCall, callback types.ToolCallback, eventCallback types.EventCallback, stdout io.Writer, defaultWorkingDir string, toolInfoMapping ToolInfoMapping) (types.ToolResult, error) {
 	// If custom callback is provided, use it first
 	if callback != nil {
 		result, handled, err := callback(ctx, stream, call)
@@ -198,7 +199,7 @@ func (c *Client) executeToolWithCallback(ctx context.Context, stream types.Strea
 	}
 
 	// Fall back to built-in tool execution
-	resultStr, ok := executeTool(ctx, stream, call, call.Name, call.RawArgs, defaultWorkingDir, toolInfoMapping)
+	resultStr, ok := executeTool(ctx, stream, call, call.Name, call.RawArgs, defaultWorkingDir, toolInfoMapping, eventCallback)
 	if !ok {
 		// If streams are provided, use bidirectional stream communication
 		if c.stdinReader != nil {

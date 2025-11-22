@@ -588,7 +588,7 @@ func (c *Client) processOpenAIResponse(ctx context.Context, stream types.StreamC
 		if req.StreamPair != nil {
 			stdout = req.StreamPair.Output
 		}
-		result, err := c.executeToolWithCallback(ctx, stream, call, req.ToolCallback, stdout, req.DefaultToolCwd, toolInfoMapping)
+		result, err := c.executeToolWithCallback(ctx, stream, call, req.ToolCallback, req.EventCallback, stdout, req.DefaultToolCwd, toolInfoMapping)
 		if err != nil {
 			return nil, fmt.Errorf("execute tool: %w", err)
 		}
@@ -727,7 +727,7 @@ func (c *Client) processAnthropicResponse(ctx context.Context, stream types.Stre
 			if req.StreamPair != nil {
 				stdout = req.StreamPair.Output
 			}
-			toolResult, err := c.executeToolWithCallback(ctx, stream, call, req.ToolCallback, stdout, req.DefaultToolCwd, toolInfoMapping)
+			toolResult, err := c.executeToolWithCallback(ctx, stream, call, req.ToolCallback, req.EventCallback, stdout, req.DefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return nil, fmt.Errorf("execute tool: %w", err)
 			}
@@ -862,7 +862,7 @@ func (c *Client) processGeminiResponse(ctx context.Context, stream types.StreamC
 			if req.StreamPair != nil {
 				stdout = req.StreamPair.Output
 			}
-			toolResult, err := c.executeToolWithCallback(ctx, stream, call, req.ToolCallback, stdout, req.DefaultToolCwd, toolInfoMapping)
+			toolResult, err := c.executeToolWithCallback(ctx, stream, call, req.ToolCallback, req.EventCallback, stdout, req.DefaultToolCwd, toolInfoMapping)
 			if err != nil {
 				return nil, fmt.Errorf("execute tool: %w", err)
 			}

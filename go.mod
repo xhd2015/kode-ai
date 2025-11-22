@@ -14,7 +14,7 @@ require (
 	github.com/xhd2015/kode-ai/cli v0.0.9
 	github.com/xhd2015/kode-ai/types v0.0.9
 	github.com/xhd2015/less-gen v0.0.18
-	github.com/xhd2015/llm-tools v0.0.22
+	github.com/xhd2015/llm-tools v0.0.23
 	github.com/xhd2015/xgo v1.0.49-0.20240916074001-40aa40fc7623
 	golang.org/x/term v0.33.0
 	google.golang.org/genai v1.15.0

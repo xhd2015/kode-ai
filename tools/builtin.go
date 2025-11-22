@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/xhd2015/kode-ai/types"
 	"github.com/xhd2015/llm-tools/tools/batch_read_file"
 	"github.com/xhd2015/llm-tools/tools/create_file_with_content"
 	"github.com/xhd2015/llm-tools/tools/defs"
@@ -132,6 +133,7 @@ func GetExecutor(toolName string) Executor {
 
 type ExecuteOptions struct {
 	DefaultWorkspaceRoot string
+	EventCallback        types.EventCallback
 }
 
 type Executor interface {
@@ -233,6 +235,13 @@ func (e RunTerminalCmdExecutor) Execute(arguments string, opts ExecuteOptions) (
 type RunBashScriptExecutor struct {
 }
 
+func (RunBashScriptExecutor) ToolName() string {
+	return "run_bash_script"
+}
+
+// to be aware of bash script execution traces and errors
+const _SETUP_BASH_TRAP = false
+
 func (e RunBashScriptExecutor) Execute(arguments string, opts ExecuteOptions) (interface{}, error) {
 	req, err := run_bash_script.ParseJSONRequest(arguments)
 	if err != nil {
@@ -243,6 +252,28 @@ func (e RunBashScriptExecutor) Execute(arguments string, opts ExecuteOptions) (i
 		clean := true
 		req.CleanOutput = &clean
 	}
+
+	if opts.EventCallback != nil && _SETUP_BASH_TRAP {
+		req.TrapRunCommand = func(log string) {
+			msg := types.Message{
+				Type:     types.MsgType_Info,
+				Role:     types.Role_User,
+				ToolName: e.ToolName(),
+				Content:  log,
+			}
+			opts.EventCallback(msg)
+		}
+		req.TrapCommandError = func(log string) {
+			msg := types.Message{
+				Type:     types.MsgType_Error,
+				Role:     types.Role_User,
+				ToolName: e.ToolName(),
+				Content:  log,
+			}
+			opts.EventCallback(msg)
+		}
+	}
+
 	return run_bash_script.RunBashScript(req)
 }
 
