@@ -159,40 +159,66 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	req.StreamPair = &types.StreamPair{
-		Input:  wsReader,
-		Output: NewWebSocketWriter(conn, s.opts.Verbose),
+	type mixedMsg struct {
+		isText   bool
+		textData []byte
+		event    types.Message
 	}
 
-	msgChan := make(chan types.Message, 100)
+	msgChan := make(chan mixedMsg, 100)
+	onWrite := func(data []byte) error {
+		msgChan <- mixedMsg{
+			isText:   true,
+			textData: data,
+		}
+		return nil
+	}
+
+	req.StreamPair = &types.StreamPair{
+		Input:  wsReader,
+		Output: NewWebSocketWriter(onWrite, s.opts.Verbose),
+	}
+
 	req.EventCallback = func(event types.Message) {
 		event = event.TimeFilled()
 		if s.opts.Verbose {
 			log.Printf("Sending event to %s: type=%s, role=%s, contentLen=%d", r.RemoteAddr, event.Type, event.Role, len(event.Content))
 		}
-		msgChan <- event
+		msgChan <- mixedMsg{
+			event: event,
+		}
 	}
 
 	if s.opts.Verbose {
 		log.Printf("Starting chat execution for %s", r.RemoteAddr)
 	}
 
+	chanDone := make(chan struct{})
 	go func() {
+		defer close(chanDone)
 		for msg := range msgChan {
-			if err := conn.WriteJSON(msg); err != nil {
-				log.Printf("Failed to send event: %v", err)
+			if msg.isText {
+				if err := conn.WriteMessage(websocket.TextMessage, msg.textData); err != nil {
+					log.Printf("Failed to send data: %v", err)
+				}
+			} else {
+				event := msg.event.TimeFilled()
+				if err := conn.WriteJSON(event); err != nil {
+					log.Printf("Failed to send event: %v", err)
+				}
 			}
 		}
 	}()
 
 	// Execute chat
 	_, err = chat.Chat(ctx, req)
+	close(msgChan)
+	<-chanDone
 	if err != nil {
 		log.Printf("Chat execution failed: %v", err)
 		s.sendError(conn, fmt.Sprintf("Chat execution failed: %v", err))
 		return
 	}
-	close(msgChan)
 
 	if s.opts.Verbose {
 		log.Printf("Chat execution completed successfully for %s", r.RemoteAddr)
@@ -443,19 +469,21 @@ func (wr *WebSocketReader) Read(p []byte) (n int, err error) {
 
 // WebSocketWriter implements io.Writer for WebSocket connections
 type WebSocketWriter struct {
-	conn    *websocket.Conn
+	// conn *websocket.Conn
+
+	onWrite func(data []byte) error
 	verbose bool
 }
 
-func NewWebSocketWriter(conn *websocket.Conn, verbose bool) *WebSocketWriter {
-	return &WebSocketWriter{conn: conn, verbose: verbose}
+func NewWebSocketWriter(onWrite func(data []byte) error, verbose bool) *WebSocketWriter {
+	return &WebSocketWriter{onWrite: onWrite, verbose: verbose}
 }
 
 func (ww *WebSocketWriter) Write(p []byte) (n int, err error) {
 	if ww.verbose {
 		log.Printf("WebSocket writer sending %d bytes", len(p))
 	}
-	err = ww.conn.WriteMessage(websocket.TextMessage, p)
+	err = ww.onWrite(p)
 	if err != nil {
 		if ww.verbose {
 			log.Printf("WebSocket write failed: %v", err)
