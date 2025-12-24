@@ -35,8 +35,10 @@ const (
 // Re-export types
 type ModelCost = types.ModelCost
 
-// AllModels re-exports from types package
-var AllModels = types.AllModels
+// GetAllModels re-exports from types package
+func GetAllModels() []string {
+	return types.GetAllModels()
+}
 
 func GetUnderlyingModel(model string) string {
 	return providers.GetUnderlyingModel(model)

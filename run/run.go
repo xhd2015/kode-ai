@@ -443,7 +443,7 @@ func ResolveEnvOptions(defaultToolCwd string, token string, tokenEnvKey string, 
 }
 
 func listModels() error {
-	for _, model := range providers.AllModels {
+	for _, model := range providers.GetAllModels() {
 		fmt.Println(model)
 	}
 	return nil
