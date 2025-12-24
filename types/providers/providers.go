@@ -28,43 +28,51 @@ const (
 )
 
 func GetModelAPIShape(model string) (APIShape, error) {
-	switch model {
-	case types.ModelGPT4_1, types.ModelGPT4_1_Mini, types.ModelGPT4o, types.ModelGPT4oMini, types.ModelGPT4oNano, types.ModelGPTo4Mini, types.ModelGPTo3, types.ModelGPT5_20250807:
-		return APIShapeOpenAI, nil
-	case types.ModelClaude3_7Sonnet, types.ModelClaude3_7Sonnet_20250219, types.ModelClaudeSonnet4, types.ModelClaudeSonnet4_20250514, types.ModelClaudeSonnet4_5, types.ModelClaudeSonnet4_20250929:
-		return APIShapeAnthropic, nil
-	case types.ModelGemini2_0_Flash, types.ModelGemini2_0_Flash_001, types.ModelGemini2_5_Pro, types.ModelGemini2_5_Pro_0605, types.ModelGemini2_5_Flash, types.ModelGemini2_5_Flash_0520:
-		return APIShapeGemini, nil
-		// default fallback to open ai compatiable
-	case types.ModelKimiK2, types.ModelKimiK2_0711_Preview, types.ModelOpenRouterKimiK2:
-		return APIShapeOpenAI, nil
-	default:
-		allModelsPrint := make([]string, 0, len(types.AllModels))
-		for _, model := range types.AllModels {
-			allModelsPrint = append(allModelsPrint, " - "+model)
-		}
-		return "", fmt.Errorf("unsupported model: %s\navailable:\n%s", model, strings.Join(allModelsPrint, "\n"))
+	// Try direct lookup
+	modelInfo, ok := types.AllModelInfos[model]
+	if ok {
+		return modelInfo.APIShape, nil
 	}
+
+	// Try underlying model (alias)
+	underlyingModel := GetUnderlyingModel(model)
+	if underlyingModel != model {
+		underlyingModelInfo, ok := types.AllModelInfos[underlyingModel]
+		if ok {
+			return underlyingModelInfo.APIShape, nil
+		}
+	}
+
+	// Model not found
+	allModels := types.GetAllModels()
+	allModelsPrint := make([]string, 0, len(allModels))
+	for _, model := range allModels {
+		allModelsPrint = append(allModelsPrint, " - "+model)
+	}
+	return "", fmt.Errorf("unsupported model: %s\navailable:\n%s", model, strings.Join(allModelsPrint, "\n"))
 }
 
 func GetModelProvider(model string) (Provider, error) {
-	switch model {
-	case types.ModelGPT4_1, types.ModelGPT4_1_Mini, types.ModelGPT4o, types.ModelGPT4oMini, types.ModelGPT4oNano, types.ModelGPTo4Mini, types.ModelGPTo3, types.ModelGPT5_20250807:
-		return ProviderOpenAI, nil
-	case types.ModelClaude3_7Sonnet, types.ModelClaude3_7Sonnet_20250219, types.ModelClaudeSonnet4, types.ModelClaudeSonnet4_20250514, types.ModelClaudeSonnet4_5, types.ModelClaudeSonnet4_20250929:
-		return ProviderAnthropic, nil
-	case types.ModelGemini2_0_Flash, types.ModelGemini2_0_Flash_001, types.ModelGemini2_5_Pro, types.ModelGemini2_5_Pro_0605, types.ModelGemini2_5_Flash, types.ModelGemini2_5_Flash_0520:
-		return ProviderGemini, nil
-		// default fallback to open ai compatiable
-	case types.ModelKimiK2, types.ModelKimiK2_0711_Preview:
-		return ProviderMoonshot, nil
-	case types.ModelOpenRouterKimiK2:
-		return ProviderOpenRouter, nil
-	default:
-		allModelsPrint := make([]string, 0, len(types.AllModels))
-		for _, model := range types.AllModels {
-			allModelsPrint = append(allModelsPrint, " - "+model)
-		}
-		return "", fmt.Errorf("unsupported model: %s\navailable:\n%s", model, strings.Join(allModelsPrint, "\n"))
+	// Try direct lookup
+	modelInfo, ok := types.AllModelInfos[model]
+	if ok {
+		return modelInfo.Provider, nil
 	}
+
+	// Try underlying model (alias)
+	underlyingModel := GetUnderlyingModel(model)
+	if underlyingModel != model {
+		underlyingModelInfo, ok := types.AllModelInfos[underlyingModel]
+		if ok {
+			return underlyingModelInfo.Provider, nil
+		}
+	}
+
+	// Model not found
+	allModels := types.GetAllModels()
+	allModelsPrint := make([]string, 0, len(allModels))
+	for _, model := range allModels {
+		allModelsPrint = append(allModelsPrint, " - "+model)
+	}
+	return "", fmt.Errorf("unsupported model: %s\navailable:\n%s", model, strings.Join(allModelsPrint, "\n"))
 }
