@@ -29,10 +29,11 @@ func NewClient(config types.Config) (*Client, error) {
 // Chat performs a chat conversation using the CLI binary
 func (c *Client) Chat(ctx context.Context, message string, opts ...types.ChatOption) (*types.Response, error) {
 	req := types.Request{
-		Model:   c.config.Model,
-		Token:   c.config.Token,
-		BaseURL: c.config.BaseURL,
-		Message: message,
+		Model:    c.config.Model,
+		APIShape: c.config.APIShape,
+		Token:    c.config.Token,
+		BaseURL:  c.config.BaseURL,
+		Message:  message,
 	}
 
 	// Apply options

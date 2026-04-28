@@ -159,6 +159,9 @@ func (c *session) chat(ctx context.Context, req types.Request, opts ...CliOption
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
+	if req.APIShape != "" {
+		args = append(args, "--api-shape", string(req.APIShape))
+	}
 	if req.Token != "" {
 		args = append(args, "--token", req.Token)
 	}

@@ -2,7 +2,7 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/shopspring/decimal v1.4.0 h1:bxl37RwXBklmTi0C79JfXCEBD1cqqHt0bbgBAGFp81k=
 github.com/shopspring/decimal v1.4.0/go.mod h1:gawqmDU56v4yIKSwfBSFip1HdCCXN8/+DMd9qYNcwME=
-github.com/xhd2015/kode-ai/types v0.0.6 h1:vHFgTZ5sce8n/O2/2mvTHnXhMqphCTED4kXQcBL1lDs=
-github.com/xhd2015/kode-ai/types v0.0.6/go.mod h1:C/NM//D895DcVXHYOz2bS9cyOtei0qWaFv6AcQAhtEQ=
+github.com/xhd2015/kode-ai/types v0.0.11 h1:5qffbGEEwiNdnCYk/5OBOM/j7g7oE1z+aVXGuU1qEW8=
+github.com/xhd2015/kode-ai/types v0.0.11/go.mod h1:C/NM//D895DcVXHYOz2bS9cyOtei0qWaFv6AcQAhtEQ=
 github.com/xhd2015/llm-tools v0.0.19 h1:iIz7zWbwHmddiRoIoL5or3aFqkECkxroJnd5a4uoBRs=
 github.com/xhd2015/llm-tools v0.0.19/go.mod h1:RmRh4/b1ybL3L8ZSp9hi54giE1iOhog/h9Wir6DDX8g=
