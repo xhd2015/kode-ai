@@ -6,6 +6,7 @@ type Config struct {
 	MaxRound        int          `json:"max_round,omitempty"`
 	BaseURL         string       `json:"base_url,omitempty"`
 	Model           string       `json:"model,omitempty"`
+	APIShape        APIShape     `json:"api_shape,omitempty"`
 	SystemPrompt    StringOrList `json:"system,omitempty"` // can be string or a list of strings
 	Tools           []string     `json:"tools,omitempty"`
 	ToolCustomFiles []string     `json:"tool_custom_files,omitempty"`

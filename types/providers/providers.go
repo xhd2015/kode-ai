@@ -43,6 +43,10 @@ func GetModelAPIShape(model string) (APIShape, error) {
 		}
 	}
 
+	if IsLikelyClaudeModel(model) {
+		return APIShapeAnthropic, nil
+	}
+
 	// Model not found
 	allModels := types.GetAllModels()
 	allModelsPrint := make([]string, 0, len(allModels))
@@ -68,6 +72,10 @@ func GetModelProvider(model string) (Provider, error) {
 		}
 	}
 
+	if IsLikelyClaudeModel(model) {
+		return ProviderAnthropic, nil
+	}
+
 	// Model not found
 	allModels := types.GetAllModels()
 	allModelsPrint := make([]string, 0, len(allModels))
@@ -75,4 +83,37 @@ func GetModelProvider(model string) (Provider, error) {
 		allModelsPrint = append(allModelsPrint, " - "+model)
 	}
 	return "", fmt.Errorf("unsupported model: %s\navailable:\n%s", model, strings.Join(allModelsPrint, "\n"))
+}
+
+func IsLikelyClaudeModel(model string) bool {
+	model = strings.ToLower(model)
+	return strings.Contains(model, "claude-") || strings.Contains(model, "claude ")
+}
+
+func NormalizeAPIShape(apiShape string) (APIShape, error) {
+	switch strings.ToLower(strings.TrimSpace(apiShape)) {
+	case "":
+		return "", nil
+	case string(APIShapeOpenAI), "open-ai":
+		return APIShapeOpenAI, nil
+	case string(APIShapeAnthropic), "claude":
+		return APIShapeAnthropic, nil
+	case string(APIShapeGemini), "google":
+		return APIShapeGemini, nil
+	default:
+		return "", fmt.Errorf("unsupported api shape: %s (available: openai, anthropic, gemini)", apiShape)
+	}
+}
+
+func DefaultProviderForAPIShape(apiShape APIShape) (Provider, error) {
+	switch apiShape {
+	case APIShapeOpenAI:
+		return ProviderOpenAI, nil
+	case APIShapeAnthropic:
+		return ProviderAnthropic, nil
+	case APIShapeGemini:
+		return ProviderGemini, nil
+	default:
+		return "", fmt.Errorf("unsupported api shape: %s", apiShape)
+	}
 }

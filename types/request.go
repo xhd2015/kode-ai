@@ -8,9 +8,10 @@ import (
 
 // Request represents a chat request
 type Request struct {
-	Model   string `json:"model"`
-	Token   string `json:"token"`
-	BaseURL string `json:"base_url"`
+	Model    string   `json:"model"`
+	APIShape APIShape `json:"api_shape,omitempty"`
+	Token    string   `json:"token"`
+	BaseURL  string   `json:"base_url"`
 
 	SystemPrompt string    `json:"system_prompt"`
 	Message      string    `json:"message"`
