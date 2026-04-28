@@ -1,5 +1,6 @@
 {
     "model": "claude-3-7-sonnet",
+    "api_shape": "anthropic",
     "max_round": 40,
     "tools": [
         "list_dir",

@@ -47,10 +47,19 @@ func NewClient(config Config) (*Client, error) {
 		return nil, fmt.Errorf("token is required")
 	}
 
-	// Auto-detect API shape from model if not provided
-	apiShape, err := providers.GetModelAPIShape(config.Model)
-	if err != nil {
-		return nil, fmt.Errorf("determine API shape: %w", err)
+	apiShape := config.APIShape
+	if apiShape == "" {
+		var err error
+		apiShape, err = providers.GetModelAPIShape(config.Model)
+		if err != nil {
+			return nil, fmt.Errorf("determine API shape: %w", err)
+		}
+	} else {
+		var err error
+		apiShape, err = providers.NormalizeAPIShape(string(apiShape))
+		if err != nil {
+			return nil, fmt.Errorf("determine API shape: %w", err)
+		}
 	}
 
 	logger := config.Logger

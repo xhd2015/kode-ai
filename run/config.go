@@ -59,7 +59,7 @@ func LoadConfig(configFile string) (*FullConfig, error) {
 }
 
 // ApplyConfig applies configuration values to the provided variables, giving precedence to command line arguments
-func ApplyConfig(config *FullConfig, token *string, maxRound *int, baseUrl *string, model *string, systemPrompt *string, tools *[]string, toolCustomFiles *[]string, toolCustomJSONs *[]string, toolDefaultCwd *string, recordFile *string, noCache *bool, showUsage *bool, ignoreDuplicateMsg *bool, logRequest *bool, logChatFlag **bool, verbose *bool, mcpServers *[]string) error {
+func ApplyConfig(config *FullConfig, token *string, maxRound *int, baseUrl *string, model *string, apiShape *string, systemPrompt *string, tools *[]string, toolCustomFiles *[]string, toolCustomJSONs *[]string, toolDefaultCwd *string, recordFile *string, noCache *bool, showUsage *bool, ignoreDuplicateMsg *bool, logRequest *bool, logChatFlag **bool, verbose *bool, mcpServers *[]string) error {
 	if config == nil {
 		return nil
 	}
@@ -76,6 +76,9 @@ func ApplyConfig(config *FullConfig, token *string, maxRound *int, baseUrl *stri
 	}
 	if *model == "" && config.Model != "" {
 		*model = config.Model
+	}
+	if *apiShape == "" && config.APIShape != "" {
+		*apiShape = string(config.APIShape)
 	}
 	if *systemPrompt == "" {
 		configSystempPrompt, err := getStrOrStrLines(config.SystemPrompt)

@@ -113,6 +113,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	msg := r.URL.Query().Get("message")
 	baseURL := r.URL.Query().Get("base_url")
 	model := r.URL.Query().Get("model")
+	apiShape := r.URL.Query().Get("api_shape")
 	token := r.URL.Query().Get("token")
 	systemPrompt := r.URL.Query().Get("system_prompt")
 
@@ -137,6 +138,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	req := types.Request{
 		Message:      msg,
 		Model:        model,
+		APIShape:     types.APIShape(apiShape),
 		Token:        token,
 		BaseURL:      baseURL,
 		SystemPrompt: systemPrompt,

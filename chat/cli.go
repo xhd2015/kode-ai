@@ -310,11 +310,7 @@ func (h *CliHandler) printTokenUsage(title string, tokenUsage types.TokenUsage, 
 }
 
 func (h *CliHandler) getTotalTokenCost(tokenUsage types.TokenUsage) string {
-	provider, err := providers.GetModelAPIShape(h.client.config.Model)
-	if err != nil {
-		return ""
-	}
-	cost, costOK := providers.ComputeCost(provider, h.client.config.Model, tokenUsage)
+	cost, costOK := providers.ComputeCost(h.client.apiShape, h.client.config.Model, tokenUsage)
 	if !costOK {
 		return ""
 	}

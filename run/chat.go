@@ -92,9 +92,10 @@ type ChatHandler struct {
 func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg string, opts ChatOptions) error {
 	// Convert to new library format
 	config := chat.Config{
-		Model:   model,
-		Token:   token,
-		BaseURL: baseUrl,
+		Model:    model,
+		APIShape: c.APIShape,
+		Token:    token,
+		BaseURL:  baseUrl,
 	}
 
 	// Set log level based on existing options

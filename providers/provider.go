@@ -32,3 +32,15 @@ func GetModelAPIShape(model string) (APIShape, error) {
 func GetModelProvider(model string) (Provider, error) {
 	return providers.GetModelProvider(model)
 }
+
+func NormalizeAPIShape(apiShape string) (APIShape, error) {
+	return providers.NormalizeAPIShape(apiShape)
+}
+
+func DefaultProviderForAPIShape(apiShape APIShape) (Provider, error) {
+	return providers.DefaultProviderForAPIShape(apiShape)
+}
+
+func IsLikelyClaudeModel(model string) bool {
+	return providers.IsLikelyClaudeModel(model)
+}

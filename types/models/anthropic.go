@@ -68,4 +68,15 @@ var AnthropicModels = map[string]ModelInfo{
 			OutputUSDPer1M:          "15.00",
 		},
 	},
+	"claude-sonnet-4-6": {
+		Name:     "claude-sonnet-4-6",
+		Provider: ProviderAnthropic,
+		APIShape: APIShapeAnthropic,
+		Cost: ModelCost{
+			InputUSDPer1M:           "3.00",
+			InputCacheWriteUSDPer1M: "3.75",
+			InputCacheReadUSDPer1M:  "0.30",
+			OutputUSDPer1M:          "15.00",
+		},
+	},
 }

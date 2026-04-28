@@ -73,6 +73,7 @@ func TestClientAPIShapeDetection(t *testing.T) {
 		expectedAPIShape types.APIShape
 	}{
 		{"claude-3-7-sonnet", types.APIShapeAnthropic},
+		{"claude-sonnet-4-6", types.APIShapeAnthropic},
 		{"gpt-4o", types.APIShapeOpenAI},
 		{"gemini-2.0-flash", types.APIShapeGemini},
 	}
@@ -90,6 +91,20 @@ func TestClientAPIShapeDetection(t *testing.T) {
 				t.Errorf("expected API shape %v but got %v", tt.expectedAPIShape, client.apiShape)
 			}
 		})
+	}
+}
+
+func TestClientAPIShapeOverride(t *testing.T) {
+	client, err := NewClient(Config{
+		Model:    "unknown-compatible-model",
+		APIShape: types.APIShapeAnthropic,
+		Token:    "test-token",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if client.apiShape != types.APIShapeAnthropic {
+		t.Errorf("expected API shape %v but got %v", types.APIShapeAnthropic, client.apiShape)
 	}
 }
 

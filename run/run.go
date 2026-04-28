@@ -48,6 +48,7 @@ Options:
   --token TOKEN                   the token
   --base-url BASE_URL             the base url
   --model MODEL                   llm model(default: gpt-4.1)
+  --api-shape SHAPE               API request shape: openai, anthropic, gemini (default: detect from model)
   --system PROMPT                 set the system prompt, PROMPT can also be a file
   --tool NAME                     predefined tool: batch_read_file,list_dir,grep_search...
                                   use kode chat --tool list to see all possible tools
@@ -167,6 +168,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var baseUrl string
 	var systemPrompt string
 	var model string
+	var apiShapeFlag string
 
 	var recordFile string
 
@@ -204,6 +206,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		StringSlice("--tool-custom-json", &toolCustomJSONs).
 		String("--tool-default-cwd", &toolDefaultCwd).
 		String("--model", &model).
+		String("--api-shape", &apiShapeFlag).
 		String("--record", &recordFile).
 		Bool("--no-cache", &noCache).
 		Bool("--show-usage", &showUsage).
@@ -266,7 +269,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		return err
 	}
 
-	err = ApplyConfig(config, &token, &maxRound, &baseUrl, &model, &systemPrompt, &tools, &toolCustomFiles, &toolCustomJSONs, &toolDefaultCwd, &recordFile, &noCache, &showUsage, &ignoreDuplicateMsg, &logRequest, &logChatFlag, &verbose, &mcpServers)
+	err = ApplyConfig(config, &token, &maxRound, &baseUrl, &model, &apiShapeFlag, &systemPrompt, &tools, &toolCustomFiles, &toolCustomJSONs, &toolDefaultCwd, &recordFile, &noCache, &showUsage, &ignoreDuplicateMsg, &logRequest, &logChatFlag, &verbose, &mcpServers)
 	if err != nil {
 		return err
 	}
@@ -318,11 +321,25 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	}
 
 	model = providers.GetUnderlyingModel(model)
-	apiShape, err := providers.GetModelAPIShape(model)
-	if err != nil {
-		return err
+	var apiShape providers.APIShape
+	if apiShapeFlag != "" {
+		apiShape, err = providers.NormalizeAPIShape(apiShapeFlag)
+		if err != nil {
+			return err
+		}
+	} else {
+		apiShape, err = providers.GetModelAPIShape(model)
+		if err != nil {
+			return err
+		}
 	}
 	provider, err := providers.GetModelProvider(model)
+	if apiShapeFlag != "" {
+		modelAPIShape, shapeErr := providers.GetModelAPIShape(model)
+		if err != nil || shapeErr != nil || modelAPIShape != apiShape {
+			provider, err = providers.DefaultProviderForAPIShape(apiShape)
+		}
+	}
 	if err != nil {
 		return err
 	}
