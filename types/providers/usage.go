@@ -12,6 +12,10 @@ func ComputeCost(apiShape APIShape, model string, usage types.TokenUsage) (types
 	if !ok {
 		return types.TokenCost{}, false
 	}
+	return ComputeCostWithModelCost(apiShape, costDef, usage)
+}
+
+func ComputeCostWithModelCost(apiShape APIShape, costDef types.ModelCost, usage types.TokenUsage) (types.TokenCost, bool) {
 	var inputUSD decimal.Decimal
 	var inputBreakdown types.TokenCostInputBreakdown
 	if apiShape == APIShapeAnthropic {

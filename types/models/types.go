@@ -34,8 +34,8 @@ type ModelInfo struct {
 
 // ModelCost represents the cost structure for a model
 type ModelCost struct {
-	InputUSDPer1M           string
-	InputCacheWriteUSDPer1M string
-	InputCacheReadUSDPer1M  string
-	OutputUSDPer1M          string
+	InputUSDPer1M           string `json:"input_usd_per_1m,omitempty"`
+	InputCacheWriteUSDPer1M string `json:"input_cache_write_usd_per_1m,omitempty"`
+	InputCacheReadUSDPer1M  string `json:"input_cache_read_usd_per_1m,omitempty"`
+	OutputUSDPer1M          string `json:"output_usd_per_1m,omitempty"`
 }

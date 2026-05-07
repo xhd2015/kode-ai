@@ -69,6 +69,13 @@ func WithCache(enabled bool) ChatOption {
 	}
 }
 
+// WithModelCost sets custom model pricing for token cost calculation.
+func WithModelCost(cost ModelCost) ChatOption {
+	return func(req *Request) {
+		req.ModelCost = &cost
+	}
+}
+
 // WithMCPServers specifies MCP servers to connect to
 func WithMCPServers(servers ...string) ChatOption {
 	return func(req *Request) {
