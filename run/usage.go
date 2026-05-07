@@ -33,6 +33,15 @@ func showUsageFromMessages(messages types.Messages) error {
 		}
 
 		total.Usage = total.Usage.Add(*msg.TokenUsage)
+		if msg.TokenCost != nil {
+			costs = append(costs, types.TokenUsageCost{
+				Usage: *msg.TokenUsage,
+				Cost:  *msg.TokenCost,
+			})
+			total.Cost = total.Cost.Add(*msg.TokenCost)
+			continue
+		}
+
 		provider, err := providers.GetModelAPIShape(msg.Model)
 		if err != nil {
 			return err

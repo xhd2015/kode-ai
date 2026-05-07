@@ -46,6 +46,11 @@ func WithCache(enabled bool) types.ChatOption {
 	return types.WithCache(enabled)
 }
 
+// WithModelCost sets custom model pricing for token cost calculation.
+func WithModelCost(cost types.ModelCost) types.ChatOption {
+	return types.WithModelCost(cost)
+}
+
 // WithMCPServers specifies MCP servers to connect to
 func WithMCPServers(servers ...string) types.ChatOption {
 	return types.WithMCPServers(servers...)

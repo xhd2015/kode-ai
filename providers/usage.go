@@ -11,3 +11,7 @@ var _1M = decimal.NewFromInt(1e6)
 func ComputeCost(apiShape APIShape, model string, usage types.TokenUsage) (types.TokenCost, bool) {
 	return providers.ComputeCost(apiShape, model, usage)
 }
+
+func ComputeCostWithModelCost(apiShape APIShape, costDef types.ModelCost, usage types.TokenUsage) (types.TokenCost, bool) {
+	return providers.ComputeCostWithModelCost(apiShape, costDef, usage)
+}

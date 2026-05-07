@@ -20,10 +20,11 @@ func Chat(ctx context.Context, req types.Request) (*types.Response, error) {
 	}
 
 	client, err := NewClient(Config{
-		Model:    req.Model,
-		APIShape: providers.APIShape(req.APIShape),
-		Token:    req.Token,
-		BaseURL:  req.BaseURL,
+		Model:     req.Model,
+		APIShape:  providers.APIShape(req.APIShape),
+		ModelCost: req.ModelCost,
+		Token:     req.Token,
+		BaseURL:   req.BaseURL,
 	})
 	if err != nil {
 		return nil, err

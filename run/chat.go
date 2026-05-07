@@ -15,6 +15,7 @@ type ChatOptions struct {
 	maxRound int
 
 	systemPrompt string
+	modelCost    *types.ModelCost
 	toolBuiltins []string
 	toolFiles    []string
 	toolJSONs    []string
@@ -92,10 +93,11 @@ type ChatHandler struct {
 func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg string, opts ChatOptions) error {
 	// Convert to new library format
 	config := chat.Config{
-		Model:    model,
-		APIShape: c.APIShape,
-		Token:    token,
-		BaseURL:  baseUrl,
+		Model:     model,
+		APIShape:  c.APIShape,
+		ModelCost: opts.modelCost,
+		Token:     token,
+		BaseURL:   baseUrl,
 	}
 
 	// Set log level based on existing options

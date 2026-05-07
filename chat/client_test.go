@@ -108,6 +108,48 @@ func TestClientAPIShapeOverride(t *testing.T) {
 	}
 }
 
+func TestClientModelCostOverride(t *testing.T) {
+	client, err := NewClient(Config{
+		Model:    "unknown-compatible-model",
+		APIShape: types.APIShapeOpenAI,
+		Token:    "test-token",
+		ModelCost: &types.ModelCost{
+			InputUSDPer1M:  "2",
+			OutputUSDPer1M: "8",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cost, ok := client.computeCost(types.TokenUsage{
+		Input:  1_000_000,
+		Output: 500_000,
+		Total:  1_500_000,
+	}, nil)
+	if !ok {
+		t.Fatalf("expected cost to be computed")
+	}
+	if cost.TotalUSD != "6" {
+		t.Fatalf("total cost = %q, want %q", cost.TotalUSD, "6")
+	}
+
+	requestCost, ok := client.computeCost(types.TokenUsage{
+		Input:  1_000_000,
+		Output: 500_000,
+		Total:  1_500_000,
+	}, &types.ModelCost{
+		InputUSDPer1M:  "1",
+		OutputUSDPer1M: "4",
+	})
+	if !ok {
+		t.Fatalf("expected request cost to be computed")
+	}
+	if requestCost.TotalUSD != "3" {
+		t.Fatalf("request total cost = %q, want %q", requestCost.TotalUSD, "3")
+	}
+}
+
 func TestChatRequestValidation(t *testing.T) {
 	client, err := NewClient(Config{
 		Model: "claude-3-7-sonnet",
@@ -149,6 +191,15 @@ func TestChatOptions(t *testing.T) {
 	WithCache(false)(req)
 	if !req.NoCache {
 		t.Errorf("expected NoCache to be true when cache is disabled")
+	}
+
+	// Test WithModelCost
+	WithModelCost(types.ModelCost{
+		InputUSDPer1M:  "1",
+		OutputUSDPer1M: "4",
+	})(req)
+	if req.ModelCost == nil || req.ModelCost.InputUSDPer1M != "1" || req.ModelCost.OutputUSDPer1M != "4" {
+		t.Errorf("expected model cost to be set but got %v", req.ModelCost)
 	}
 
 	// Test WithHistory

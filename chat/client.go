@@ -393,9 +393,12 @@ func (c *Client) ChatRequest(ctx context.Context, req types.Request) (*types.Res
 
 		totalTokenUsage = totalTokenUsage.Add(tokenUsage)
 		if req.EventCallback != nil {
+			tokenCost := c.computeCostPtr(tokenUsage, req.ModelCost)
 			req.EventCallback(types.Message{
 				Type:       types.MsgType_TokenUsage,
+				Model:      c.config.Model,
 				TokenUsage: &tokenUsage,
+				TokenCost:  tokenCost,
 			})
 		}
 
@@ -434,10 +437,7 @@ func (c *Client) ChatRequest(ctx context.Context, req types.Request) (*types.Res
 	}
 
 	// Compute cost if possible
-	var cost *types.TokenCost
-	if costResult, ok := c.computeCost(totalTokenUsage); ok {
-		cost = &costResult
-	}
+	cost := c.computeCostPtr(totalTokenUsage, req.ModelCost)
 
 	return &types.Response{
 		TokenUsage: totalTokenUsage,
@@ -1165,12 +1165,22 @@ func (c *Client) buildMessages(msg string, systemMessageOpenAI *openai.ChatCompl
 }
 
 // computeCost computes the cost for the given token usage
-func (c *Client) computeCost(usage types.TokenUsage) (types.TokenCost, bool) {
-	// For now, return a simple implementation
-	// This would need the full implementation from run/usage.go
-	return types.TokenCost{
-		TotalUSD: "0.00", // Placeholder
-	}, false
+func (c *Client) computeCost(usage types.TokenUsage, requestModelCost *types.ModelCost) (types.TokenCost, bool) {
+	if requestModelCost != nil {
+		return providers.ComputeCostWithModelCost(c.apiShape, *requestModelCost, usage)
+	}
+	if c.config.ModelCost != nil {
+		return providers.ComputeCostWithModelCost(c.apiShape, *c.config.ModelCost, usage)
+	}
+	return providers.ComputeCost(c.apiShape, c.config.Model, usage)
+}
+
+func (c *Client) computeCostPtr(usage types.TokenUsage, requestModelCost *types.ModelCost) *types.TokenCost {
+	cost, ok := c.computeCost(usage, requestModelCost)
+	if !ok {
+		return nil
+	}
+	return &cost
 }
 
 // connectToMCPServer connects to an MCP server

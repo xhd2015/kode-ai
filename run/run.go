@@ -49,6 +49,7 @@ Options:
   --base-url BASE_URL             the base url
   --model MODEL                   llm model(default: gpt-4.1)
   --api-shape SHAPE               API request shape: openai, anthropic, gemini (default: detect from model)
+  --model-cost JSON               custom model pricing, e.g. {"input_usd_per_1m":"1","output_usd_per_1m":"4"}
   --system PROMPT                 set the system prompt, PROMPT can also be a file
   --tool NAME                     predefined tool: batch_read_file,list_dir,grep_search...
                                   use kode chat --tool list to see all possible tools
@@ -169,6 +170,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var systemPrompt string
 	var model string
 	var apiShapeFlag string
+	var modelCostJSON string
 
 	var recordFile string
 
@@ -207,6 +209,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		String("--tool-default-cwd", &toolDefaultCwd).
 		String("--model", &model).
 		String("--api-shape", &apiShapeFlag).
+		String("--model-cost", &modelCostJSON).
 		String("--record", &recordFile).
 		Bool("--no-cache", &noCache).
 		Bool("--show-usage", &showUsage).
@@ -272,6 +275,15 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	err = ApplyConfig(config, &token, &maxRound, &baseUrl, &model, &apiShapeFlag, &systemPrompt, &tools, &toolCustomFiles, &toolCustomJSONs, &toolDefaultCwd, &recordFile, &noCache, &showUsage, &ignoreDuplicateMsg, &logRequest, &logChatFlag, &verbose, &mcpServers)
 	if err != nil {
 		return err
+	}
+
+	modelCost := config.ModelCost
+	if modelCostJSON != "" {
+		var parsedModelCost types.ModelCost
+		if err := json.Unmarshal([]byte(modelCostJSON), &parsedModelCost); err != nil {
+			return fmt.Errorf("parse --model-cost: %w", err)
+		}
+		modelCost = &parsedModelCost
 	}
 
 	if toolDefaultCwd == "" {
@@ -363,6 +375,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		chatWithServerFn: cli.ChatWithServer,
 
 		systemPrompt:   systemPrompt,
+		modelCost:      modelCost,
 		logRequest:     logRequest,
 		toolBuiltins:   tools,
 		toolFiles:      toolCustomFiles,
@@ -587,29 +600,32 @@ func handleViewWithOptions(opts viewOptions, files []string) error {
 				limitedContent := limitPrintLength(m.Content)
 				fmt.Printf("%s: <tool_result tool=%q>%s</tool_result>\n", m.Role, m.ToolName, limitedContent)
 			case types.MsgType_TokenUsage:
-				if m.Model != "" {
+				var tokenUsage types.TokenUsage
+				if m.TokenUsage != nil {
+					tokenUsage = *m.TokenUsage
+				}
+
+				total.Usage = total.Usage.Add(tokenUsage)
+
+				var costUSD string
+				if m.TokenCost != nil {
+					costUSD = "$" + m.TokenCost.TotalUSD
+					total.Cost = total.Cost.Add(*m.TokenCost)
+				} else if m.Model != "" {
 					provider, err := providers.GetModelAPIShape(m.Model)
 					if err != nil {
 						fmt.Printf("Token Usage: unsupported model %s\n", m.Model)
 						continue
 					}
-					var tokenUsage types.TokenUsage
-					if m.TokenUsage != nil {
-						tokenUsage = *m.TokenUsage
-					}
-
-					total.Usage = total.Usage.Add(tokenUsage)
-
 					cost, costOK := providers.ComputeCost(provider, m.Model, tokenUsage)
-					var costUSD string
 					if costOK {
 						costUSD = "$" + cost.TotalUSD
 						total.Cost = total.Cost.Add(cost)
 					}
-					printTokenUsage(os.Stdout, "Token Usage", tokenUsage, costUSD)
 				} else {
 					fmt.Printf("Token Usage: empty model\n")
 				}
+				printTokenUsage(os.Stdout, "Token Usage", tokenUsage, costUSD)
 			case types.MsgType_StopReason:
 				// nothing
 				fmt.Printf("assistant: stop\n")

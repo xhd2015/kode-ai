@@ -17,12 +17,13 @@ type Messages []types.Message
 
 // Config represents the client configuration with provider-specific fields
 type Config struct {
-	Model    string             // Required: Model name (e.g., "claude-3-7-sonnet")
-	APIShape providers.APIShape // Optional: Auto-detected from model if not specified
-	Token    string             // Required: API token
-	BaseURL  string             // Optional: Custom API base URL
-	Provider providers.Provider // Optional: Auto-detected from model if not specified
-	LogLevel types.LogLevel     // Optional: None, Request, Response, Debug
+	Model     string             // Required: Model name (e.g., "claude-3-7-sonnet")
+	APIShape  providers.APIShape // Optional: Auto-detected from model if not specified
+	ModelCost *types.ModelCost   // Optional: Custom pricing for token cost calculation
+	Token     string             // Required: API token
+	BaseURL   string             // Optional: Custom API base URL
+	Provider  providers.Provider // Optional: Auto-detected from model if not specified
+	LogLevel  types.LogLevel     // Optional: None, Request, Response, Debug
 
 	Logger types.Logger
 }

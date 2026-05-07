@@ -12,7 +12,6 @@ import (
 
 	"github.com/xhd2015/kode-ai/internal/ioread"
 	"github.com/xhd2015/kode-ai/internal/terminal"
-	"github.com/xhd2015/kode-ai/providers"
 	"github.com/xhd2015/kode-ai/types"
 )
 
@@ -138,6 +137,8 @@ func (h *CliHandler) handleCliEnablingServer(ctx context.Context, message string
 		req.Model = h.client.config.Model
 		req.Token = h.client.config.Token
 		req.BaseURL = h.client.config.BaseURL
+		req.APIShape = types.APIShape(h.client.apiShape)
+		req.ModelCost = h.client.config.ModelCost
 	}
 
 	// Apply options
@@ -278,7 +279,11 @@ func (h *CliHandler) formatOutput(event types.Message) {
 		if h.opts.Verbose {
 			tokenUsage := event.TokenUsage
 			if tokenUsage != nil {
-				h.printTokenUsage("Token Usage", *tokenUsage, "")
+				var costUSD string
+				if event.TokenCost != nil {
+					costUSD = "$" + event.TokenCost.TotalUSD
+				}
+				h.printTokenUsage("Token Usage", *tokenUsage, costUSD)
 			}
 		}
 
@@ -310,7 +315,7 @@ func (h *CliHandler) printTokenUsage(title string, tokenUsage types.TokenUsage, 
 }
 
 func (h *CliHandler) getTotalTokenCost(tokenUsage types.TokenUsage) string {
-	cost, costOK := providers.ComputeCost(h.client.apiShape, h.client.config.Model, tokenUsage)
+	cost, costOK := h.client.computeCost(tokenUsage, nil)
 	if !costOK {
 		return ""
 	}
