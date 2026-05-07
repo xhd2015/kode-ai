@@ -101,7 +101,7 @@ func (c *serverSession) chatWithServer(ctx context.Context, server string, req t
 	}
 
 	// Process WebSocket messages
-	return c.processWebSocketMessages(ctx, conn, req.Model, req.ToolCallback, req.FollowUpCallback, req.ToolDefinitions)
+	return c.processWebSocketMessages(ctx, conn, req.Model, req.APIShape, req.ModelCost, req.ToolCallback, req.FollowUpCallback, req.ToolDefinitions)
 }
 
 // writeEvent writes an event and calls the event callback
@@ -123,7 +123,7 @@ func (c *serverSession) writeEvent(msg types.Message) error {
 }
 
 // processWebSocketMessages processes messages from the WebSocket connection
-func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *websocket.Conn, model string, toolCallback types.ToolCallback, followUpCallback types.FollowUpCallback, toolDefs []*types.UnifiedTool) (*types.Response, error) {
+func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *websocket.Conn, model string, apiShape types.APIShape, modelCost *types.ModelCost, toolCallback types.ToolCallback, followUpCallback types.FollowUpCallback, toolDefs []*types.UnifiedTool) (*types.Response, error) {
 	var response types.Response
 
 	// ping every 10s
@@ -194,13 +194,22 @@ func (c *serverSession) processWebSocketMessages(ctx context.Context, conn *webs
 		}
 		if msg.Type == types.MsgType_TokenUsage && msg.TokenUsage != nil {
 			tokenUsage := msg.TokenUsage
+			response.TokenUsage = response.TokenUsage.Add(*tokenUsage)
 			if msg.TokenCost == nil {
-				response.TokenUsage = response.TokenUsage.Add(*tokenUsage)
-				provider, _ := providers.GetModelAPIShape(model)
-				if provider != "" {
-					modelCost, ok := providers.ComputeCost(provider, model, *msg.TokenUsage)
+				costAPIShape := providers.APIShape(apiShape)
+				if costAPIShape == "" {
+					costAPIShape, _ = providers.GetModelAPIShape(model)
+				}
+				if costAPIShape != "" {
+					var cost types.TokenCost
+					var ok bool
+					if modelCost != nil {
+						cost, ok = providers.ComputeCostWithModelCost(costAPIShape, *modelCost, *msg.TokenUsage)
+					} else {
+						cost, ok = providers.ComputeCost(costAPIShape, model, *msg.TokenUsage)
+					}
 					if ok {
-						msg.TokenCost = &modelCost
+						msg.TokenCost = &cost
 					}
 				}
 			}

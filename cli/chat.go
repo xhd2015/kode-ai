@@ -162,6 +162,13 @@ func (c *session) chat(ctx context.Context, req types.Request, opts ...CliOption
 	if req.APIShape != "" {
 		args = append(args, "--api-shape", string(req.APIShape))
 	}
+	if req.ModelCost != nil {
+		modelCostJSON, err := json.Marshal(req.ModelCost)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal model cost: %w", err)
+		}
+		args = append(args, "--model-cost", string(modelCostJSON))
+	}
 	if req.Token != "" {
 		args = append(args, "--token", req.Token)
 	}
