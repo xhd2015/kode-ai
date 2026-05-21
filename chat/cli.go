@@ -137,6 +137,7 @@ func (h *CliHandler) handleCliEnablingServer(ctx context.Context, message string
 		req.Model = h.client.config.Model
 		req.Token = h.client.config.Token
 		req.BaseURL = h.client.config.BaseURL
+		req.HTTPHeaders = h.client.config.HTTPHeaders
 		req.APIShape = types.APIShape(h.client.apiShape)
 		req.ModelCost = h.client.config.ModelCost
 	}

@@ -30,6 +30,65 @@ kode chat --model=claude-sonnet-4 --record=chat.json --system=EXAMPLE_SYSTEM.md 
 kode chat --max-round=10 ...
 ```
 
+### OpenCode Zen free model smoke test
+
+OpenCode Zen exposes OpenAI-compatible chat completions at the full REST endpoint:
+
+```text
+https://opencode.ai/zen/v1/chat/completions
+```
+
+When using `kode`, pass the SDK base URL instead. The OpenAI Go SDK appends
+`/chat/completions` internally:
+
+```text
+https://opencode.ai/zen/v1
+```
+
+The live model list is available at:
+
+```sh
+curl -sS https://opencode.ai/zen/v1/models
+```
+
+For direct API calls, use the raw model id from that list, without the
+`opencode/` prefix shown by the OpenCode CLI model picker. Free models observed
+there include:
+
+```text
+deepseek-v4-flash-free
+minimax-m2.5-free
+nemotron-3-super-free
+qwen3.6-plus-free
+```
+
+Run this from the repository root:
+
+```sh
+cd /Users/xhd2015/Projects/gopath/src/git.garena.com/shopee/loan-service/credit_backend/code-lens/codelens-workspace/kode-ai
+export OPENCODE_API_KEY=...
+
+go run ./cmd/kode chat \
+  --api-shape=openai \
+  --base-url=https://opencode.ai/zen/v1 \
+  --token="$OPENCODE_API_KEY" \
+  --model=deepseek-v4-flash-free \
+  --log-chat=false \
+  'one word of French capital'
+```
+
+Expected output:
+
+```text
+Paris
+```
+
+Equivalent one-liner using the absolute `cmd/kode` package path:
+
+```sh
+go run /Users/xhd2015/Projects/gopath/src/git.garena.com/shopee/loan-service/credit_backend/code-lens/codelens-workspace/kode-ai/cmd/kode chat --api-shape=openai --base-url=https://opencode.ai/zen/v1 --token="$OPENCODE_API_KEY" --model=deepseek-v4-flash-free --log-chat=false 'one word of French capital'
+```
+
 ## Library Usage
 
 The `kode-ai` package can also be used as a Go library for programmatic chat interactions:

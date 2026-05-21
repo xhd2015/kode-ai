@@ -76,6 +76,21 @@ func WithModelCost(cost ModelCost) ChatOption {
 	}
 }
 
+// WithHTTPHeaders adds extra HTTP headers to provider requests.
+func WithHTTPHeaders(headers HTTPHeaders) ChatOption {
+	return func(req *Request) {
+		if len(headers) == 0 {
+			return
+		}
+		if req.HTTPHeaders == nil {
+			req.HTTPHeaders = make(HTTPHeaders, len(headers))
+		}
+		for name, values := range headers {
+			req.HTTPHeaders[name] = append(req.HTTPHeaders[name], values...)
+		}
+	}
+}
+
 // WithMCPServers specifies MCP servers to connect to
 func WithMCPServers(servers ...string) ChatOption {
 	return func(req *Request) {

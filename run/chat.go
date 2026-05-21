@@ -16,6 +16,7 @@ type ChatOptions struct {
 
 	systemPrompt string
 	modelCost    *types.ModelCost
+	httpHeaders  types.HTTPHeaders
 	toolBuiltins []string
 	toolFiles    []string
 	toolJSONs    []string
@@ -93,11 +94,12 @@ type ChatHandler struct {
 func (c *ChatHandler) Handle(model string, baseUrl string, token string, msg string, opts ChatOptions) error {
 	// Convert to new library format
 	config := chat.Config{
-		Model:     model,
-		APIShape:  c.APIShape,
-		ModelCost: opts.modelCost,
-		Token:     token,
-		BaseURL:   baseUrl,
+		Model:       model,
+		APIShape:    c.APIShape,
+		ModelCost:   opts.modelCost,
+		Token:       token,
+		BaseURL:     baseUrl,
+		HTTPHeaders: opts.httpHeaders,
 	}
 
 	// Set log level based on existing options

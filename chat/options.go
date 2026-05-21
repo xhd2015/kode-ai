@@ -51,6 +51,11 @@ func WithModelCost(cost types.ModelCost) types.ChatOption {
 	return types.WithModelCost(cost)
 }
 
+// WithHTTPHeaders adds extra HTTP headers to provider requests.
+func WithHTTPHeaders(headers types.HTTPHeaders) types.ChatOption {
+	return types.WithHTTPHeaders(headers)
+}
+
 // WithMCPServers specifies MCP servers to connect to
 func WithMCPServers(servers ...string) types.ChatOption {
 	return types.WithMCPServers(servers...)

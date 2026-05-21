@@ -8,6 +8,7 @@ type Config struct {
 	Model           string       `json:"model,omitempty"`
 	APIShape        APIShape     `json:"api_shape,omitempty"`
 	ModelCost       *ModelCost   `json:"model_cost,omitempty"`
+	HTTPHeaders     HTTPHeaders  `json:"http_headers,omitempty"`
 	SystemPrompt    StringOrList `json:"system,omitempty"` // can be string or a list of strings
 	Tools           []string     `json:"tools,omitempty"`
 	ToolCustomFiles []string     `json:"tool_custom_files,omitempty"`

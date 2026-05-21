@@ -50,6 +50,7 @@ Options:
   --model MODEL                   llm model(default: gpt-4.1)
   --api-shape SHAPE               API request shape: openai, anthropic, gemini (default: detect from model)
   --model-cost JSON               custom model pricing, e.g. {"input_usd_per_1m":"1","output_usd_per_1m":"4"}
+  -H,--header HEADER              extra HTTP header, curl-style "Name: value"; can be repeated
   --system PROMPT                 set the system prompt, PROMPT can also be a file
   --tool NAME                     predefined tool: batch_read_file,list_dir,grep_search...
                                   use kode chat --tool list to see all possible tools
@@ -171,6 +172,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	var model string
 	var apiShapeFlag string
 	var modelCostJSON string
+	var rawHTTPHeaders []string
 
 	var recordFile string
 
@@ -210,6 +212,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 		String("--model", &model).
 		String("--api-shape", &apiShapeFlag).
 		String("--model-cost", &modelCostJSON).
+		StringSlice("-H,--header", &rawHTTPHeaders).
 		String("--record", &recordFile).
 		Bool("--no-cache", &noCache).
 		Bool("--show-usage", &showUsage).
@@ -276,6 +279,12 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 	if err != nil {
 		return err
 	}
+
+	httpHeaders, err := parseHTTPHeaders(rawHTTPHeaders)
+	if err != nil {
+		return err
+	}
+	httpHeaders = mergeHTTPHeaders(config.HTTPHeaders, httpHeaders)
 
 	modelCost := config.ModelCost
 	if modelCostJSON != "" {
@@ -376,6 +385,7 @@ func handleChat(mode string, args []string, baesCmd string, defaultBaseURL strin
 
 		systemPrompt:   systemPrompt,
 		modelCost:      modelCost,
+		httpHeaders:    httpHeaders,
 		logRequest:     logRequest,
 		toolBuiltins:   tools,
 		toolFiles:      toolCustomFiles,

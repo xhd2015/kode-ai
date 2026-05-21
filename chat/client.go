@@ -29,6 +29,37 @@ import (
 	"google.golang.org/genai"
 )
 
+func httpHeaders(headers types.HTTPHeaders) http.Header {
+	if len(headers) == 0 {
+		return nil
+	}
+	result := make(http.Header, len(headers))
+	for name, values := range headers {
+		for i, value := range values {
+			if i == 0 {
+				result.Set(name, value)
+				continue
+			}
+			result.Add(name, value)
+		}
+	}
+	return result
+}
+
+func mergeHTTPHeaders(base types.HTTPHeaders, overrides types.HTTPHeaders) types.HTTPHeaders {
+	if len(base) == 0 && len(overrides) == 0 {
+		return nil
+	}
+	merged := make(types.HTTPHeaders, len(base)+len(overrides))
+	for name, values := range base {
+		merged[name] = append(merged[name], values...)
+	}
+	for name, values := range overrides {
+		merged[name] = append(merged[name], values...)
+	}
+	return merged
+}
+
 // Client represents the chat client
 type Client struct {
 	config   Config
@@ -93,7 +124,9 @@ func (c *Client) Chat(ctx context.Context, message string, opts ...types.ChatOpt
 // ChatRequest performs a chat conversation using a direct request
 func (c *Client) ChatRequest(ctx context.Context, req types.Request) (*types.Response, error) {
 	// Create clients
-	clients, err := c.createClients(ctx)
+	requestClient := *c
+	requestClient.config.HTTPHeaders = mergeHTTPHeaders(c.config.HTTPHeaders, req.HTTPHeaders)
+	clients, err := requestClient.createClients(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create clients: %w", err)
 	}
@@ -991,6 +1024,15 @@ func (c *Client) createClients(ctx context.Context) (*ClientUnion, error) {
 			clientOptions = append(clientOptions, openai_opt.WithBaseURL(c.config.BaseURL))
 		}
 		clientOptions = append(clientOptions, openai_opt.WithAPIKey(c.config.Token))
+		for name, values := range c.config.HTTPHeaders {
+			for i, value := range values {
+				if i == 0 {
+					clientOptions = append(clientOptions, openai_opt.WithHeader(name, value))
+					continue
+				}
+				clientOptions = append(clientOptions, openai_opt.WithHeaderAdd(name, value))
+			}
+		}
 		if c.config.LogLevel >= types.LogLevelRequest {
 			logger := log.New(os.Stderr, "", log.LstdFlags)
 			clientOptions = append(clientOptions, openai_opt.WithDebugLog(logger))
@@ -1004,6 +1046,15 @@ func (c *Client) createClients(ctx context.Context) (*ClientUnion, error) {
 			clientOpts = append(clientOpts, anth_opt.WithBaseURL(c.config.BaseURL))
 		}
 		clientOpts = append(clientOpts, anth_opt.WithAPIKey(c.config.Token))
+		for name, values := range c.config.HTTPHeaders {
+			for i, value := range values {
+				if i == 0 {
+					clientOpts = append(clientOpts, anth_opt.WithHeader(name, value))
+					continue
+				}
+				clientOpts = append(clientOpts, anth_opt.WithHeaderAdd(name, value))
+			}
+		}
 		if c.config.LogLevel >= types.LogLevelRequest {
 			logger := log.New(os.Stderr, "", log.LstdFlags)
 			clientOpts = append(clientOpts, anth_opt.WithDebugLog(logger))
@@ -1017,6 +1068,7 @@ func (c *Client) createClients(ctx context.Context) (*ClientUnion, error) {
 			Backend: genai.BackendGeminiAPI,
 			HTTPOptions: genai.HTTPOptions{
 				BaseURL: c.config.BaseURL,
+				Headers: httpHeaders(c.config.HTTPHeaders),
 			},
 		})
 		if err != nil {

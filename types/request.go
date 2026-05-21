@@ -13,6 +13,9 @@ type Request struct {
 	ModelCost *ModelCost `json:"model_cost,omitempty"`
 	Token     string     `json:"token"`
 	BaseURL   string     `json:"base_url"`
+	// HTTPHeaders are extra provider HTTP headers. Each key can contain multiple
+	// values to preserve repeated -H/--header flags.
+	HTTPHeaders HTTPHeaders `json:"http_headers,omitempty"`
 
 	SystemPrompt string    `json:"system_prompt"`
 	Message      string    `json:"message"`
