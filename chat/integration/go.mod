@@ -3,9 +3,9 @@ module github.com/xhd2015/kode-ai/chat/integration
 go 1.24
 
 require (
-	github.com/xhd2015/kode-ai v0.0.0-00010101000000-000000000000
-	github.com/xhd2015/kode-ai/cli v0.0.0-00010101000000-000000000000
-	github.com/xhd2015/kode-ai/types v0.0.3
+	github.com/xhd2015/kode-ai v0.0.44
+	github.com/xhd2015/kode-ai/cli v0.0.12
+	github.com/xhd2015/kode-ai/types v0.0.13
 	github.com/xhd2015/llm-tools v0.0.17
 )
 
@@ -41,9 +41,3 @@ require (
 	google.golang.org/grpc v1.66.2 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
-
-replace github.com/xhd2015/kode-ai/cli => ../../cli
-
-replace github.com/xhd2015/kode-ai => ../..
-
-replace github.com/xhd2015/kode-ai/types => ../../types
