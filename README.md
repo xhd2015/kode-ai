@@ -65,7 +65,6 @@ qwen3.6-plus-free
 Run this from the repository root:
 
 ```sh
-cd /Users/xhd2015/Projects/gopath/src/git.garena.com/shopee/loan-service/credit_backend/code-lens/codelens-workspace/kode-ai
 export OPENCODE_API_KEY=...
 
 go run ./cmd/kode chat \
@@ -86,7 +85,7 @@ Paris
 Equivalent one-liner using the absolute `cmd/kode` package path:
 
 ```sh
-go run /Users/xhd2015/Projects/gopath/src/git.garena.com/shopee/loan-service/credit_backend/code-lens/codelens-workspace/kode-ai/cmd/kode chat --api-shape=openai --base-url=https://opencode.ai/zen/v1 --token="$OPENCODE_API_KEY" --model=deepseek-v4-flash-free --log-chat=false 'one word of French capital'
+go run ./cmd/kode chat --api-shape=openai --base-url=https://opencode.ai/zen/v1 --token="$OPENCODE_API_KEY" --model=deepseek-v4-flash-free --log-chat=false 'one word of French capital'
 ```
 
 ## Library Usage
