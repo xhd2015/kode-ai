@@ -85,8 +85,9 @@ type Message struct {
 	Model string `json:"model"`
 
 	// general content
-	Content string `json:"content"`
-	Error   string `json:"error,omitempty"` // meaningful when: Type == MsgType_StreamEnd, MsgType_Error, MsgType_ToolCall
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+	Error            string `json:"error,omitempty"` // meaningful when: Type == MsgType_StreamEnd, MsgType_Error, MsgType_ToolCall
 
 	// for tool call
 	ToolUseID string `json:"tool_use_id,omitempty"`

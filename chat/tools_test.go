@@ -171,7 +171,7 @@ func TestToolCallbackWithFallback(t *testing.T) {
 	}
 
 	client := &Client{}
-	result, err := client.executeToolWithCallback(context.Background(), nil, call, customCallback, nil, "", mapping)
+	result, err := client.executeToolWithCallback(context.Background(), nil, call, customCallback, nil, nil, "", mapping)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestToolCallbackWithFallback(t *testing.T) {
 		RawArgs: `{}`,
 	}
 
-	_, err = client.executeToolWithCallback(context.Background(), nil, builtinCall, customCallback, nil, "", mapping)
+	_, err = client.executeToolWithCallback(context.Background(), nil, builtinCall, customCallback, nil, nil, "", mapping)
 	// We expect this to fail since we don't have real tool executors in test
 	if err == nil {
 		t.Logf("Note: builtin tool execution would normally fail in test environment")

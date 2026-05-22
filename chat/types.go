@@ -59,7 +59,7 @@ func (messages Messages) ToOpenAI(keepSystemPrompts bool) (msgs []openai.ChatCom
 		var msgUnion openai.ChatCompletionMessageParamUnion
 		switch msg.Type {
 		case types.MsgType_ToolCall:
-			msgUnion.OfAssistant = &openai.ChatCompletionAssistantMessageParam{
+			assistant := &openai.ChatCompletionAssistantMessageParam{
 				ToolCalls: []openai.ChatCompletionMessageToolCallParam{
 					{
 						ID: msg.ToolUseID,
@@ -70,6 +70,8 @@ func (messages Messages) ToOpenAI(keepSystemPrompts bool) (msgs []openai.ChatCom
 					},
 				},
 			}
+			setOpenAIReasoningContentString(assistant, msg.ReasoningContent)
+			msgUnion.OfAssistant = assistant
 		case types.MsgType_ToolResult:
 			msgUnion.OfTool = &openai.ChatCompletionToolMessageParam{
 				ToolCallID: msg.ToolUseID,
@@ -86,11 +88,13 @@ func (messages Messages) ToOpenAI(keepSystemPrompts bool) (msgs []openai.ChatCom
 					},
 				}
 			case types.Role_Assistant:
-				msgUnion.OfAssistant = &openai.ChatCompletionAssistantMessageParam{
+				assistant := &openai.ChatCompletionAssistantMessageParam{
 					Content: openai.ChatCompletionAssistantMessageParamContentUnion{
 						OfString: param.NewOpt(msg.Content),
 					},
 				}
+				setOpenAIReasoningContentString(assistant, msg.ReasoningContent)
+				msgUnion.OfAssistant = assistant
 			case types.Role_System:
 				systemPrompts = append(systemPrompts, msg.Content)
 				if keepSystemPrompts {

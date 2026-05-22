@@ -88,6 +88,11 @@ Equivalent one-liner using the absolute `cmd/kode` package path:
 go run ./cmd/kode chat --api-shape=openai --base-url=https://opencode.ai/zen/v1 --token="$OPENCODE_API_KEY" --model=deepseek-v4-flash-free --log-chat=false 'one word of French capital'
 ```
 
+Validate tool call with agentic ability:
+```sh
+go run ./cmd/kode chat --api-shape=openai --base-url=https://opencode.ai/zen/v1 --token="$OPENCODE_API_KEY" --model=deepseek-v4-flash-free --log-chat=false "run ls and tell me what's there" --tool run_bash_script --max-round 10
+```
+
 ## Library Usage
 
 The `kode-ai` package can also be used as a Go library for programmatic chat interactions:

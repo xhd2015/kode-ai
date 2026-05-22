@@ -566,35 +566,36 @@ func (c *Client) processOpenAIResponse(ctx context.Context, stream types.StreamC
 	var toolCalls []types.ToolCall
 	var respMessages []openai.ChatCompletionMessageParamUnion
 	var toolResults []openai.ChatCompletionMessageParamUnion
+	reasoningContentRaw := openAIReasoningContentRaw(firstChoice.Message)
+	reasoningContent := openAIReasoningContentString(reasoningContentRaw)
 
 	// Handle main content
 	if firstChoice.Message.Content != "" {
 		// Emit message event
 		if req.EventCallback != nil {
 			req.EventCallback(types.Message{
-				Type:      types.MsgType_Msg,
-				Content:   firstChoice.Message.Content,
-				Role:      types.Role_Assistant,
-				Model:     c.config.Model,
-				Timestamp: time.Now().Unix(),
+				Type:             types.MsgType_Msg,
+				Content:          firstChoice.Message.Content,
+				ReasoningContent: reasoningContent,
+				Role:             types.Role_Assistant,
+				Model:            c.config.Model,
+				Timestamp:        time.Now().Unix(),
 			})
 		}
 
-		respMessages = append(respMessages, openai.ChatCompletionMessageParamUnion{
-			OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-				Content: openai.ChatCompletionAssistantMessageParamContentUnion{
-					OfString: param.NewOpt(firstChoice.Message.Content),
-				},
-			},
-		})
-
-		messages = append(messages, CreateMessage(types.MsgType_Msg, types.Role_Assistant, c.config.Model, firstChoice.Message.Content))
+		msg := CreateMessage(types.MsgType_Msg, types.Role_Assistant, c.config.Model, firstChoice.Message.Content)
+		msg.ReasoningContent = reasoningContent
+		messages = append(messages, msg)
 	}
 
 	// Handle tool calls
 	var recordToolCalls []openai.ChatCompletionMessageToolCallParam
-	for _, toolCall := range firstChoice.Message.ToolCalls {
+	for toolCallIndex, toolCall := range firstChoice.Message.ToolCalls {
 		toolUseNum++
+		toolCallReasoningContent := ""
+		if firstChoice.Message.Content == "" && toolCallIndex == 0 {
+			toolCallReasoningContent = reasoningContent
+		}
 
 		call, err := parseToolCall(toolCall.Function.Name, toolCall.ID, toolCall.Function.Arguments, req.DefaultToolCwd)
 		if err != nil {
@@ -605,13 +606,14 @@ func (c *Client) processOpenAIResponse(ctx context.Context, stream types.StreamC
 		// Emit tool call event
 		if req.EventCallback != nil {
 			req.EventCallback(types.Message{
-				Type:      types.MsgType_ToolCall,
-				Content:   toolCall.Function.Arguments,
-				ToolUseID: toolCall.ID,
-				ToolName:  toolCall.Function.Name,
-				Model:     c.config.Model,
-				Role:      types.Role_Assistant,
-				Timestamp: time.Now().Unix(),
+				Type:             types.MsgType_ToolCall,
+				Content:          toolCall.Function.Arguments,
+				ReasoningContent: toolCallReasoningContent,
+				ToolUseID:        toolCall.ID,
+				ToolName:         toolCall.Function.Name,
+				Model:            c.config.Model,
+				Role:             types.Role_Assistant,
+				Timestamp:        time.Now().Unix(),
 			})
 		}
 
@@ -623,7 +625,9 @@ func (c *Client) processOpenAIResponse(ctx context.Context, stream types.StreamC
 			},
 		})
 
-		messages = append(messages, CreateToolCallMessage(types.Role_Assistant, c.config.Model, toolCall.Function.Name, toolCall.ID, toolCall.Function.Arguments))
+		msg := CreateToolCallMessage(types.Role_Assistant, c.config.Model, toolCall.Function.Name, toolCall.ID, toolCall.Function.Arguments)
+		msg.ReasoningContent = toolCallReasoningContent
+		messages = append(messages, msg)
 
 		// Execute tool
 		var stdout io.Writer
@@ -672,12 +676,8 @@ func (c *Client) processOpenAIResponse(ctx context.Context, stream types.StreamC
 		messages = append(messages, CreateToolResultMessage(types.Role_User, c.config.Model, toolCall.Function.Name, toolCall.ID, resultStr))
 	}
 
-	if len(recordToolCalls) > 0 {
-		respMessages = append(respMessages, openai.ChatCompletionMessageParamUnion{
-			OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-				ToolCalls: recordToolCalls,
-			},
-		})
+	if firstChoice.Message.Content != "" || len(recordToolCalls) > 0 || len(reasoningContentRaw) > 0 {
+		respMessages = append(respMessages, openAIAssistantMessageParam(firstChoice.Message.Content, recordToolCalls, reasoningContentRaw))
 	}
 
 	return &ResponseResult{
